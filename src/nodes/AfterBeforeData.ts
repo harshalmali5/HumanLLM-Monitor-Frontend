@@ -1,6 +1,4 @@
-import useStore from "../store";
 import { NodeType } from "./NodeData";
-import useNodeStore from "./node-store";
 
 export enum AfterChoice {
     ModifyAnswer = 1,
