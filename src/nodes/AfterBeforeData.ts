@@ -5,6 +5,7 @@ export enum AfterChoice {
     CriticAnswer = 2,
     FindBetterPrompt = 3,
     EvalAnswer = 4,
+    SkipHumanEval = 5,
 }
 
 export enum BeforeChoice {
@@ -19,7 +20,7 @@ export class AfterBeforeData {
     id: string;
     color?: string;
     type: NodeType;
-    choice: AfterChoice;
+    choice: AfterChoice | BeforeChoice;
     changeChoice: (choice: AfterChoice) => void;
     prompt: string;
     setPrompt: (prompt: string) => void;
