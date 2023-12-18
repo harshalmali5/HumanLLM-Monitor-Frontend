@@ -18,11 +18,7 @@ import Trash from "../TrashIcon";
 
 const AfterBefore = (p: AfterBeforeProps) => {
     const { data } = p;
-    const color = data.color
-        ? data.color
-        : data.type === NodeType.After
-        ? "bg-rose-300"
-        : "bg-red-300";
+    const color = data.type === NodeType.After ? "bg-rose-300" : "bg-red-100";
     const [[w, h], setWH] = useState([256, 256]);
     const globlaNodeDelete = useGlobalStore(
         (state) => state.deleteNode,
@@ -63,7 +59,9 @@ const AfterBefore = (p: AfterBeforeProps) => {
 
     return (
         <div
-            className={`${NodeCSSClass} ${color} relative`}
+            className={`${NodeCSSClass} ${color} ${
+                data.error ? "border-2 border-red-500" : ""
+            }`}
             style={{ width: w, height: h }}
         >
             <NodeToolbar>

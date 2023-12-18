@@ -1,4 +1,4 @@
-import { INodeData } from "../types/NodeData";
+import { AfterBeforeData } from "./AfterBeforeData";
 
 export enum NodeType {
     Before = 1,
@@ -6,10 +6,10 @@ export enum NodeType {
 }
 
 class NodeData {
-    value: INodeData;
+    value: AfterBeforeData;
     error: boolean = false;
 
-    constructor(value: INodeData) {
+    constructor(value: AfterBeforeData) {
         this.value = value;
     }
 }

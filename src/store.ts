@@ -22,7 +22,7 @@ export type RFState = {
     addNode: (node: Node) => void;
     deleteNode: (nodeId: string) => void;
     addEdge: (edge: Edge) => void;
-    deleteEdge: (edge: Edge) => void;
+    deleteEdge: (edge: string) => void;
     nodePositions: () => { [key: string]: { x: number; y: number } };
 };
 
@@ -67,9 +67,9 @@ const useStore = createWithEqualityFn<RFState>((set, get) => ({
             edges: [...get().edges, edge],
         });
     },
-    deleteEdge: (edge: Edge) => {
+    deleteEdge: (edgeId: string) => {
         set({
-            edges: get().edges.filter((e) => e.id !== edge.id),
+            edges: get().edges.filter((e) => e.id !== edgeId),
         });
     }
 }));

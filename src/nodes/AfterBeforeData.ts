@@ -5,7 +5,6 @@ export enum AfterChoice {
     CriticAnswer = 2,
     FindBetterPrompt = 3,
     EvalAnswer = 4,
-    SkipHumanEval = 5,
 }
 
 export enum BeforeChoice {
@@ -17,24 +16,30 @@ export enum BeforeChoice {
 }
 
 export class AfterBeforeData {
-    id: string;
-    color?: string;
-    type: NodeType;
-    choice: AfterChoice | BeforeChoice;
-    changeChoice: (choice: AfterChoice) => void;
-    prompt: string;
-    setPrompt: (prompt: string) => void;
+    readonly id: string;
+    readonly choice: AfterChoice | BeforeChoice;
+    readonly prompt: string;
+    readonly error: boolean;
+    
+    readonly type: NodeType;
+    public setPrompt: (prompt: string) => void;
+    public changeChoice: (choice: AfterChoice) => void;
+    public setError: (error: boolean) => void;
 
     /// choice, changeChoice, prompt and setPrompt
     /// should always be is procured from useState
     constructor(
         id: string,
         type: NodeType, choice: AfterChoice, changeChoice: (_: AfterChoice) => void,
-        prompt: string, setPrompt: (_: string) => void) {
+        prompt: string, setPrompt: (_: string) => void,
+            error: boolean, setError: (_: boolean) => void,
+        ) {
         this.choice = choice;
         this.changeChoice = changeChoice;
         this.prompt = prompt;
         this.setPrompt = setPrompt;
+        this.error = error;
+        this.setError = setError;
         this.type = type;
         this.id = id;
     }

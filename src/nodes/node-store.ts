@@ -6,7 +6,7 @@ export type NodeState = {
         [key: string]: AfterBeforeData;
     },
     addNode: (key: string, node: AfterBeforeData) => void;
-    deleteNode: (key: string,) => void;
+    deleteNode: (key: string) => void;
     updateNode: (key: string, node: AfterBeforeData) => void;
 };
 
