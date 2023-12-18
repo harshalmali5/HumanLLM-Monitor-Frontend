@@ -21,8 +21,8 @@ const selector = (state: RFState) => ({
 });
 
 const nodeTypes = {
-    AfterBeforeNode,
-    InferenceNode,
+    "AfterBeforeNode": AfterBeforeNode,
+    "InferenceNode": InferenceNode,
 };
 
 const nodeKeys = Object.keys(nodeTypes);
@@ -49,6 +49,12 @@ function Execute() {
 
     useEffect(() => {
         let valid = true;
+
+        // reset errors 
+        Object.values(nodeData).forEach((data) => {
+            data!.setError(false);
+        });
+
         for (let i = 0; i < edges.length; i++) {
             const edge = edges[i];
             const source = nodeMap[edge.source];
@@ -89,13 +95,6 @@ function Execute() {
                     valid = false;
                     targetData!.setError(true);
                     continue;
-                }
-            } else {
-                if (source.type === nodeKeys[0]) {
-                    sourceData!.setError(false);
-                }
-                if (target.type === nodeKeys[0]) {
-                    targetData!.setError(false);
                 }
             }
         }

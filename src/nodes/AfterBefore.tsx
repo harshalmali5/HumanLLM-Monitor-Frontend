@@ -60,7 +60,7 @@ const AfterBefore = (p: AfterBeforeProps) => {
     return (
         <div
             className={`${NodeCSSClass} ${color} ${
-                data.error ? "border-2 border-red-500" : ""
+                data.error ? "border-4 border-dotted border-red-500" : ""
             }`}
             style={{ width: w, height: h }}
         >
