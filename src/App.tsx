@@ -114,22 +114,24 @@ function ExecOutput({
 function useExecution(
     edges: Edge[],
     sendData: (_: string) => void,
-    getResponse: () => string
+    getResponse: () => Promise<string>
 ) {
     const nodes = useStore((state) => state.nodes, shallow);
     const nodeData = useNodeStore((state) => state.nodeData, shallow);
-    const remainingEdges = useRef<string[]>(toposort(edges));
+    const edgeIx = useRef(0);
 
-    const nextStep = useCallback(() => {
+    const nextStep = useCallback(async () => {
         // serialze the currect edge
         // send it to the server
+        const remainingEdges = edges.slice(edgeIx.current);
 
-        if (remainingEdges.current.length === 0) {
+        console.log("remaining edges", remainingEdges);
+
+        if (remainingEdges.length === 0) {
             return false;
         }
 
-        const edgeId = remainingEdges.current.shift();
-        const edge = edges.find((e) => e.id === edgeId);
+        const edge = remainingEdges.shift();
         if (!edge) {
             return false;
         }
@@ -143,9 +145,9 @@ function useExecution(
 
         if (sourceData.type === targetData.type) {
             sendData(`\n`);
-            getResponse();
+            const r = await getResponse(); 
+            console.log(" getResponse -> ", r);
             sendData("E\n"); // go before inference
-            sendData("\n"); // and execute inference again
             return true;
         } else {
             sendData("\n");
@@ -206,16 +208,17 @@ function Execute() {
         }
     }, []);
     const getResponse = useCallback(() => {
-        let result = "";
-        let interval = setInterval(() => {
-            if (processedIx.current < output.length) {   
-                const res = output.slice(processedIx.current).join("\n");
-                processedIx.current = output.length;
-                clearInterval(interval);
-                result = res; 
-            }
-        }, 200);
-        return result;
+        const promise = new Promise<string>((resolve) => {
+            let interval = setInterval(() => {
+                if (processedIx.current < output.length) {
+                    const res = output.slice(processedIx.current).join("\n");
+                    processedIx.current = output.length;
+                    clearInterval(interval);
+                    resolve(res);
+                }
+            }, 200);
+        });
+        return promise;
     }, [output]);
     const { nextStep } = useExecution(edges, input, getResponse);
 
@@ -281,13 +284,25 @@ function Execute() {
         if (!isValid || executing) {
             return;
         }
-        if (!wsRef.current) {
-            wsRef.current = new WebSocket("ws://localhost:1337/ws");
-            wsRef.current.onmessage = onMessage;
-            wsRef.current.onclose = onClose;
+        if (wsRef.current) {
+            wsRef.current.close();
         }
+        wsRef.current = new WebSocket("ws://localhost:1337/ws");
+        wsRef.current.onmessage = onMessage;
+        wsRef.current.onclose = onClose;
         setExecuting(true);
-        while (nextStep()) {}
+        function recPromise() {
+            nextStep().then((res) => {
+                if (res) {
+                    recPromise();
+                } else {
+                    setExecuting(false);
+                }
+            });
+        }
+        wsRef.current.onopen = () => {
+            recPromise();
+        };
     }, [isValid, executing, nextStep]);
 
     return (
@@ -317,6 +332,7 @@ function App() {
         selector,
         shallow
     );
+    const generatedRef = useRef(false);
 
     const nodePositions = useStore((state) => state.nodePositions, shallow);
     const addNode = useStore((state) => state.addNode, shallow);
@@ -356,6 +372,18 @@ function App() {
         },
         [addNode, getFreePosition]
     );
+
+    useEffect(() => {
+        console.log("adding nodes");
+        if (generatedRef.current) {
+            return;
+        }
+        genNode("Coach")();
+        genNode("Coder", NodeType.Coach)();
+        genNode("Validator", NodeType.Coder)();
+        genNode("Capitalizer", NodeType.Validator)();
+        generatedRef.current = true;
+    }, []);
 
     const deleteHandler = useCallback(
         (e: KeyboardEvent) => {
