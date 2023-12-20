@@ -23,7 +23,10 @@ const selector = (state: RFState) => ({
 
 const nodeTypes = {
     AfterBeforeNode: AfterBeforeNode,
-    InferenceNode: InferenceNode,
+    Coder: InferenceNode,
+    Validator: InferenceNode,
+    Coach: InferenceNode,
+    Capitalizer: InferenceNode,
 };
 
 const nodeKeys = Object.keys(nodeTypes);
@@ -56,7 +59,7 @@ function ExecOutput({
             return;
         }
         const [_, ...answers] = match;
-        setProcessedOutput(p => [...p, answers[0].split("\n")]);
+        setProcessedOutput((p) => [...p, answers[0].split("\n")]);
         setParsedTill(output.length);
     }, [output]);
 
@@ -172,7 +175,7 @@ function Execute() {
                         targetData!.setError(NodeError.BeforeAsParent);
                         continue;
                     }
-                } else if (target.type === nodeKeys[1]) {
+                } else {
                     if (sourceData!.type === NodeType.After) {
                         valid = false;
                         sourceData!.setError(NodeError.InferenceAsChild);
@@ -181,7 +184,7 @@ function Execute() {
                 }
             }
             // Inference -> After
-            else if (source.type === nodeKeys[1]) {
+            else if (source.type !== nodeKeys[0]) {
                 if (target.type === nodeKeys[0]) {
                     if (targetData!.type === NodeType.Before) {
                         valid = false;
@@ -197,7 +200,7 @@ function Execute() {
         }
 
         const allInferenceNodesHaveSuccessors = nodes.every((node) => {
-            if (node.type === nodeKeys[1]) {
+            if (node.type !== nodeKeys[0]) {
                 return !!sourceToTarget[node.id];
             }
             return true;
@@ -253,15 +256,15 @@ function App() {
     }, [nodePositions]);
 
     const genNode = useCallback(
-        (isInference: boolean, type?: NodeType) => () => {
+        (type: string, afterBeforeType?: NodeType) => () => {
             const id = nanoid();
-            const data = type;
+            const data = afterBeforeType ?? "";
             const position = getFreePosition();
             addNode({
                 id,
                 data,
                 position,
-                type: isInference ? nodeKeys[1] : nodeKeys[0],
+                type,
             });
         },
         [addNode, getFreePosition]
@@ -317,22 +320,24 @@ function App() {
                     >
                         <button
                             className="bg-rose-200 rounded px-2 py-1"
-                            onClick={genNode(false, NodeType.Before)}
+                            onClick={genNode(nodeKeys[0], NodeType.Before)}
                         >
                             Before Inference
                         </button>
                         <button
                             className="bg-rose-200 rounded px-2 py-1"
-                            onClick={genNode(false, NodeType.After)}
+                            onClick={genNode(nodeKeys[0], NodeType.After)}
                         >
                             After Inference
                         </button>
-                        <button
-                            className="bg-rose-200 rounded px-2 py-1"
-                            onClick={genNode(true)}
-                        >
-                            Inference
-                        </button>
+                        {nodeKeys.slice(1).map((key) => (
+                            <button
+                                className="bg-rose-200 rounded px-2 py-1"
+                                onClick={genNode(key)}
+                            >
+                                {key}
+                            </button>
+                        ))}
                     </Panel>
                 </ReactFlow>
 

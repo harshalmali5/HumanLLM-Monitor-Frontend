@@ -5,7 +5,7 @@ import useGlobalStore from "../store";
 import Trash from "../TrashIcon";
 
 const InferenceNode = (p: InferenceProps) => {
-    const { data, id } = p;
+    const { id, type } = p;
     const deleteNode = useGlobalStore((state) => state.deleteNode);
 
     const deleteSelf = () => deleteNode(id);
@@ -17,7 +17,7 @@ const InferenceNode = (p: InferenceProps) => {
             </NodeToolbar>
             <h1 className="text-2xl text-center">Inference</h1>
             <Handle type="target" position={Position.Top} />
-            <p>{data}</p>
+            <h2 className="text-xl text-center">{type}</h2>
             <Handle type="source" position={Position.Bottom} />
         </div>
     );
