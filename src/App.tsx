@@ -4,13 +4,12 @@ import { nanoid } from "nanoid";
 import { shallow } from "zustand/shallow";
 import useStore, { RFState } from "./store";
 import { useCallback, useEffect, useRef, useState } from "react";
-import AfterBeforeNode from "./nodes/AfterBeforeNode";
-import { NodeType } from "./nodes/NodeData";
-import InferenceNode from "./nodes/InferenceNode";
+import { NodeType } from "./nodes/node-types";
 import useNodeStore from "./nodes/node-store";
 
 import "reactflow/dist/style.css";
-import { NodeError } from "./nodes/AfterBeforeData";
+import { NodeError } from "./nodes/InferenceData";
+import Inference from "./nodes/Inference";
 
 const selector = (state: RFState) => ({
     nodes: state.nodes,
@@ -22,11 +21,10 @@ const selector = (state: RFState) => ({
 });
 
 const nodeTypes = {
-    AfterBeforeNode: AfterBeforeNode,
-    Coder: InferenceNode,
-    Validator: InferenceNode,
-    Coach: InferenceNode,
-    Capitalizer: InferenceNode,
+    Coder: Inference,
+    Validator: Inference,
+    Coach: Inference,
+    Capitalizer: Inference,
 };
 
 const nodeKeys = Object.keys(nodeTypes);
@@ -59,7 +57,7 @@ function ExecOutput({
             return;
         }
         const [_, ...answers] = match;
-        setProcessedOutput((p) => [...p, answers[0].split("\n")]);
+        setProcessedOutput((p) => [...p, ...answers.map((x) => x.split("\n"))]);
         setParsedTill(output.length);
     }, [output]);
 
@@ -87,6 +85,12 @@ function ExecOutput({
                         className="bg-white p-2 rounded"
                         onChange={(e) => input(e.target.value)}
                     ></textarea>
+                    <button
+                        className="bg-rose-200 rounded px-2 py-1"
+                        onClick={() => input("")}
+                    >
+                        Submit
+                    </button>
                 </div>
             )}
         </>
@@ -111,6 +115,7 @@ function Execute() {
     const [isValid, setIsValid] = useState(true);
     const [executing, setExecuting] = useState(false);
     const [needsInput, setNeedsInput] = useState(false);
+    const [inputLabel, setInputLabel] = useState("");
     const wsRef = useRef<WebSocket | null>(null);
     const [output, setOutput] = useState<string[]>([]);
 
@@ -119,8 +124,10 @@ function Execute() {
         setOutput((prev) => [...prev, e.data]);
         const lines = e.data.split("\n");
         const lastLine = lines[lines.length - 1];
-        const regex = /(?:Choose\san\saction)/g;
+        const regex =
+            /(?:Choose\san\saction)|(?:critic\/feedback\/request\:)|(?:\(yes\/no\)\:)|(?:(or\shit\senter)\:)/g;
         setNeedsInput(regex.test(lastLine));
+        setInputLabel(lastLine.replace(/\x1b\[\d\d?m/g, " "));
     }, []);
 
     const onClose = useCallback(() => {
@@ -158,60 +165,44 @@ function Execute() {
             const edge = edges[i];
             const source = nodeMap[edge.source];
             const target = nodeMap[edge.target];
-            const sourceData = nodeData[edge.source];
-            const targetData = nodeData[edge.target];
 
-            // console.log(sourceData, targetData);
-            // console.log(source, target);
-
-            // ensure
-            // Before -> Inference
-            // After ->? Before
-            if (source.type === nodeKeys[0]) {
-                if (target.type === nodeKeys[0]) {
-                    if (sourceData!.type === NodeType.Before) {
-                        valid = false;
-                        sourceData!.setError(NodeError.AfterAsChild);
-                        targetData!.setError(NodeError.BeforeAsParent);
-                        continue;
-                    }
-                } else {
-                    if (sourceData!.type === NodeType.After) {
-                        valid = false;
-                        sourceData!.setError(NodeError.InferenceAsChild);
-                        continue;
-                    }
-                }
-            }
-            // Inference -> After
-            else if (source.type !== nodeKeys[0]) {
-                if (target.type === nodeKeys[0]) {
-                    if (targetData!.type === NodeType.Before) {
-                        valid = false;
-                        targetData!.setError(NodeError.InferenceAsParent);
-                        continue;
-                    }
-                } else if (target.type === nodeKeys[1]) {
+            // first node is coach and last is capitalizer
+            // then (coder->critic)* in the middle
+            if (i === 0) {
+                if (source.type !== nodeKeys[0]) {
                     valid = false;
-                    targetData!.setError(NodeError.InferenceAsParent);
-                    continue;
+                    nodeData[source.id].setError(NodeError.FirstIsNotCoach);
+                }
+            } else if (i === edges.length - 1) {
+                if (target.type !== nodeKeys[nodeKeys.length - 1]) {
+                    valid = false;
+                    nodeData[target.id].setError(
+                        NodeError.LastIsNotCapitalizer
+                    );
+                }
+            } else {
+                if (
+                    source.type !== nodeKeys[1] ||
+                    target.type !== nodeKeys[1]
+                ) {
+                    valid = false;
+                    nodeData[source.id].setError(NodeError.NotCoder);
+                    nodeData[target.id].setError(NodeError.NotCoder);
                 }
             }
         }
 
-        const allInferenceNodesHaveSuccessors = nodes.every((node) => {
-            if (node.type !== nodeKeys[0]) {
-                return !!sourceToTarget[node.id];
-            }
-            return true;
-        });
-
-        setIsValid(valid || !allInferenceNodesHaveSuccessors);
+        setIsValid(valid);
     }, [edges]);
 
     return (
         <>
-            <ExecOutput output={output} needsInput={needsInput} input={input} />
+            <ExecOutput
+                output={output}
+                needsInput={needsInput}
+                input={input}
+                inputLabel={inputLabel}
+            />
 
             <button
                 className={`bg-rose-200 ${
@@ -318,19 +309,7 @@ function App() {
                         position="top-left"
                         className="flex justify-center space-x-2"
                     >
-                        <button
-                            className="bg-rose-200 rounded px-2 py-1"
-                            onClick={genNode(nodeKeys[0], NodeType.Before)}
-                        >
-                            Before Inference
-                        </button>
-                        <button
-                            className="bg-rose-200 rounded px-2 py-1"
-                            onClick={genNode(nodeKeys[0], NodeType.After)}
-                        >
-                            After Inference
-                        </button>
-                        {nodeKeys.slice(1).map((key) => (
+                        {nodeKeys.map((key) => (
                             <button
                                 className="bg-rose-200 rounded px-2 py-1"
                                 onClick={genNode(key)}
