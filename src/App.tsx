@@ -48,6 +48,7 @@ function ExecOutput({
     const [processedOutput, setProcessedOutput] = useState<string[][]>([]);
     const [parsedTill, setParsedTill] = useState(0);
     const regex = /LLM ANSWER:\n((?:.|\n)*)\n\*{5}/g;
+    const [inputValue, setInputValue] = useState("");
 
     useEffect(() => {
         console.log("output changed");
@@ -83,11 +84,18 @@ function ExecOutput({
                     <div className="font-bold">{inputLabel}</div>
                     <textarea
                         className="bg-white p-2 rounded"
-                        onChange={(e) => input(e.target.value)}
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
                     ></textarea>
+                    {/*
+                        FIXME: Do not use Inline onClick handlers
+                    */}
                     <button
                         className="bg-rose-200 rounded px-2 py-1"
-                        onClick={() => input("")}
+                        onClick={() => {
+                            input(inputValue);
+                            setInputValue("");
+                        }}
                     >
                         Submit
                     </button>
