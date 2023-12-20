@@ -218,6 +218,7 @@ function Execute() {
         setOutput((prev) => [...prev, e.data]);
     }, []);
 
+    // used to wait for the websocket to send a message
     const waitWsMessage = useCallback(() => {
         return new Promise<void>((resolve, reject) => {
             if (!wsRef.current) {
