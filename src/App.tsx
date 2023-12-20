@@ -114,46 +114,51 @@ function ExecOutput({
 function useExecution(
     edges: Edge[],
     sendData: (_: string) => void,
-    getResponse: () => Promise<string>
+    waitWsMessage: () => Promise<void>
 ) {
     const nodes = useStore((state) => state.nodes, shallow);
     const nodeData = useNodeStore((state) => state.nodeData, shallow);
     const edgeIx = useRef(0);
 
-    const nextStep = useCallback(async () => {
+    const nextStep = useCallback(() => {
         // serialze the currect edge
         // send it to the server
-        const remainingEdges = edges.slice(edgeIx.current);
+        const p = new Promise<boolean>((resolve) => {
+            const remainingEdges = edges.slice(edgeIx.current);
 
-        console.log("remaining edges", remainingEdges);
+            console.log("remaining edges", remainingEdges);
 
-        if (remainingEdges.length === 0) {
-            return false;
-        }
+            if (remainingEdges.length === 0) {
+                return false;
+            }
 
-        const edge = remainingEdges.shift();
-        if (!edge) {
-            return false;
-        }
-        const source = nodes.find((n) => n.id === edge.source);
-        const target = nodes.find((n) => n.id === edge.target);
-        if (!source || !target) {
-            return false;
-        }
-        const sourceData = nodeData[source.id];
-        const targetData = nodeData[target.id];
+            const edge = remainingEdges.shift();
+            if (!edge) {
+                return false;
+            }
+            const source = nodes.find((n) => n.id === edge.source);
+            const target = nodes.find((n) => n.id === edge.target);
+            if (!source || !target) {
+                return false;
+            }
+            const sourceData = nodeData[source.id];
+            const targetData = nodeData[target.id];
 
-        if (sourceData.type === targetData.type) {
-            sendData(`\n`);
-            const r = await getResponse(); 
-            console.log(" getResponse -> ", r);
-            sendData("E\n"); // go before inference
-            return true;
-        } else {
-            sendData("\n");
-        }
-
-        return false;
+            sendData(`\n`); // go skip before inference menu
+            // pause execution here and wait for the websocket to send a message
+            waitWsMessage()
+                .then(() => {
+                    if (sourceData.type === targetData.type) {
+                        sendData("E"); // go before inference
+                    }
+                    sendData("\n");
+                    resolve(true);
+                })
+                .catch(() => {
+                    resolve(false);
+                });
+        });
+        return p;
     }, [edges, nodes, nodeData]);
 
     return { nextStep };
@@ -207,25 +212,28 @@ function Execute() {
             wsRef.current.send(s);
         }
     }, []);
-    const getResponse = useCallback(() => {
-        const promise = new Promise<string>((resolve) => {
-            let interval = setInterval(() => {
-                if (processedIx.current < output.length) {
-                    const res = output.slice(processedIx.current).join("\n");
-                    processedIx.current = output.length;
-                    clearInterval(interval);
-                    resolve(res);
-                }
-            }, 200);
-        });
-        return promise;
-    }, [output]);
-    const { nextStep } = useExecution(edges, input, getResponse);
 
     const onMessage = useCallback((e: MessageEvent) => {
         console.log(e);
         setOutput((prev) => [...prev, e.data]);
     }, []);
+
+    const waitWsMessage = useCallback(() => {
+        return new Promise<void>((resolve, reject) => {
+            if (!wsRef.current) {
+                reject();
+                return;
+            }
+            wsRef.current.onmessage = (e) => {
+                onMessage(e);
+                if (/(?:Choose an action)/.test(e.data)) {
+                    resolve();
+                }
+            };
+        });
+    }, []);
+
+    const { nextStep } = useExecution(edges, input, waitWsMessage);
 
     const onClose = useCallback(() => {
         console.log("closed");
@@ -284,11 +292,13 @@ function Execute() {
         if (!isValid || executing) {
             return;
         }
+        setOutput([]);
+        processedIx.current = 0;
+
         if (wsRef.current) {
             wsRef.current.close();
         }
         wsRef.current = new WebSocket("ws://localhost:1337/ws");
-        wsRef.current.onmessage = onMessage;
         wsRef.current.onclose = onClose;
         setExecuting(true);
         function recPromise() {
@@ -300,9 +310,9 @@ function Execute() {
                 }
             });
         }
-        wsRef.current.onopen = () => {
+        waitWsMessage().then(() => {
             recPromise();
-        };
+        });
     }, [isValid, executing, nextStep]);
 
     return (
@@ -327,12 +337,73 @@ function Execute() {
     );
 }
 
+const initNodes = [
+    {
+        id: "1",
+        type: "Coach",
+        position: { x: 100, y: 100 },
+        data: "",
+    },
+    {
+        id: "2",
+        type: "Coder",
+        position: { x: 100, y: 200 },
+        data: "",
+    },
+    {
+        id: "3",
+        type: "Validator",
+        position: { x: 100, y: 300 },
+        data: "",
+    },
+    {
+        id: "4",
+        type: "Capitalizer",
+        position: { x: 100, y: 400 },
+        data: "",
+    },
+];
+
+const initEdges = [
+    {
+        id: "e1",
+        source: "1",
+        target: "2",
+    },
+    {
+        id: "e2",
+        source: "2",
+        target: "3",
+    },
+    {
+        id: "e3",
+        source: "3",
+        target: "4",
+    },
+];
+
 function App() {
     const { nodes, edges, onNodesChange, onEdgesChange, onConnect } = useStore(
         selector,
         shallow
     );
     const generatedRef = useRef(false);
+    const addEdge = useStore((state) => state.addEdge, shallow);
+
+    useEffect(() => {
+        console.log("adding nodes");
+        if (generatedRef.current) {
+            return;
+        }
+        initNodes.forEach((node) => {
+            addNode(node);
+        });
+        initEdges.forEach((edge) => {
+            addEdge(edge);
+        });
+
+        generatedRef.current = true;
+    }, []);
 
     const nodePositions = useStore((state) => state.nodePositions, shallow);
     const addNode = useStore((state) => state.addNode, shallow);
@@ -378,10 +449,6 @@ function App() {
         if (generatedRef.current) {
             return;
         }
-        genNode("Coach")();
-        genNode("Coder", NodeType.Coach)();
-        genNode("Validator", NodeType.Coder)();
-        genNode("Capitalizer", NodeType.Validator)();
         generatedRef.current = true;
     }, []);
 
