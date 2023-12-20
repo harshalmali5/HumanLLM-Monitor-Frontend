@@ -69,10 +69,10 @@ function ExecOutput({
                         <div className="font-bold">Answer {i + 1}</div>
                         <div className="bg-white p-2 rounded">
                             {answer.map((line, i) => (
-                                <>
-                                    <div key={i}>{line}</div>
+                                <div key={i}>
+                                    <div>{line}</div>
                                     <br />
-                                </>
+                                </div>
                             ))}
                         </div>
                     </div>
