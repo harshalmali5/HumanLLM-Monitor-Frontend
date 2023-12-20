@@ -56,7 +56,7 @@ function ExecOutput({
             return;
         }
         const [_, ...answers] = match;
-        setProcessedOutput(answers.map((answer) => answer.split("\n")));
+        setProcessedOutput(p => [...p, answers[0].split("\n")]);
         setParsedTill(output.length);
     }, [output]);
 
