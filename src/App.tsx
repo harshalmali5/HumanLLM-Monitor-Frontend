@@ -297,7 +297,7 @@ function App() {
         <>
             <div className="grid grid-cols-7 h-screen">
                 <ReactFlow
-                    className="col-span-5"
+                    className="col-span-4"
                     nodes={nodes}
                     onNodesChange={onNodesChange}
                     edges={edges}
@@ -339,7 +339,7 @@ function App() {
                     </Panel>
                 </ReactFlow>
 
-                <div className="col-span-2 bg-purple-50 flex flex-col p-4">
+                <div className="col-span-3 bg-purple-50 flex flex-col p-4">
                     <Execute />
                 </div>
             </div>
