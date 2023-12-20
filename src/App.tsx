@@ -333,9 +333,6 @@ function App() {
                         >
                             Inference
                         </button>
-                        <button className="bg-rose-200 rounded px-2 py-1">
-                            Panel
-                        </button>
                     </Panel>
                 </ReactFlow>
 
