@@ -20,6 +20,7 @@ export enum NodeError {
     FirstIsNotCoach = 1,
     LastIsNotCapitalizer = 2,
     NotCoder = 3,
+    Cyclic = 4,
 }
 
 export class InferenceNodeData {

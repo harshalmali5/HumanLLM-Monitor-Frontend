@@ -1,4 +1,10 @@
-import ReactFlow, { Controls, Background, MiniMap, Panel } from "reactflow";
+import ReactFlow, {
+    Controls,
+    Background,
+    MiniMap,
+    Panel,
+    Edge,
+} from "reactflow";
 
 import { nanoid } from "nanoid";
 import { shallow } from "zustand/shallow";
@@ -21,9 +27,9 @@ const selector = (state: RFState) => ({
 });
 
 const nodeTypes = {
+    Coach: Inference,
     Coder: Inference,
     Validator: Inference,
-    Coach: Inference,
     Capitalizer: Inference,
 };
 
@@ -105,6 +111,80 @@ function ExecOutput({
     );
 }
 
+function useExecution(
+    edges: Edge[],
+    sendData: (_: string) => void,
+    getResponse: () => string
+) {
+    const nodes = useStore((state) => state.nodes, shallow);
+    const nodeData = useNodeStore((state) => state.nodeData, shallow);
+    const remainingEdges = useRef<string[]>(toposort(edges));
+
+    const nextStep = useCallback(() => {
+        // serialze the currect edge
+        // send it to the server
+
+        if (remainingEdges.current.length === 0) {
+            return false;
+        }
+
+        const edgeId = remainingEdges.current.shift();
+        const edge = edges.find((e) => e.id === edgeId);
+        if (!edge) {
+            return false;
+        }
+        const source = nodes.find((n) => n.id === edge.source);
+        const target = nodes.find((n) => n.id === edge.target);
+        if (!source || !target) {
+            return false;
+        }
+        const sourceData = nodeData[source.id];
+        const targetData = nodeData[target.id];
+
+        if (sourceData.type === targetData.type) {
+            sendData(`\n`);
+            getResponse();
+            sendData("E\n"); // go before inference
+            sendData("\n"); // and execute inference again
+            return true;
+        } else {
+            sendData("\n");
+        }
+
+        return false;
+    }, [edges, nodes, nodeData]);
+
+    return { nextStep };
+}
+
+function toposort(edges: Edge[]): string[] {
+    const nodeMap = edges.reduce((acc, edge) => {
+        if (!acc[edge.source]) {
+            acc[edge.source] = [];
+        }
+        acc[edge.source].push(edge.target);
+        return acc;
+    }, {} as Record<string, string[]>);
+
+    const visited = new Set<string>();
+    const sorted: string[] = [];
+
+    const dfs = (node: string) => {
+        if (visited.has(node)) {
+            return;
+        }
+        visited.add(node);
+        if (nodeMap[node]) {
+            nodeMap[node].forEach((child) => dfs(child));
+        }
+        sorted.push(node);
+    };
+
+    Object.keys(nodeMap).forEach((node) => dfs(node));
+
+    return sorted.reverse();
+}
+
 function Execute() {
     const nodeData = useNodeStore((state) => state.nodeData, shallow);
     const nodes = useStore((state) => state.nodes, shallow);
@@ -113,48 +193,40 @@ function Execute() {
         acc[node.id] = node;
         return acc;
     }, {} as Record<string, any>);
-    const sourceToTarget = edges.reduce((acc, edge) => {
-        if (!acc[edge.source]) {
-            acc[edge.source] = [];
-        }
-        acc[edge.source].push(edge.target);
-        return acc;
-    }, {} as Record<string, string[]>);
     const [isValid, setIsValid] = useState(true);
     const [executing, setExecuting] = useState(false);
-    const [needsInput, setNeedsInput] = useState(false);
-    const [inputLabel, setInputLabel] = useState("");
     const wsRef = useRef<WebSocket | null>(null);
     const [output, setOutput] = useState<string[]>([]);
+    const processedIx = useRef(0);
+
+    const input = useCallback((s: string) => {
+        if (wsRef.current) {
+            console.log("sending", s);
+            wsRef.current.send(s);
+        }
+    }, []);
+    const getResponse = useCallback(() => {
+        let result = "";
+        let interval = setInterval(() => {
+            if (processedIx.current < output.length) {   
+                const res = output.slice(processedIx.current).join("\n");
+                processedIx.current = output.length;
+                clearInterval(interval);
+                result = res; 
+            }
+        }, 200);
+        return result;
+    }, [output]);
+    const { nextStep } = useExecution(edges, input, getResponse);
 
     const onMessage = useCallback((e: MessageEvent) => {
         console.log(e);
         setOutput((prev) => [...prev, e.data]);
-        const lines = e.data.split("\n");
-        const lastLine = lines[lines.length - 1];
-        const regex =
-            /(?:Choose\san\saction)|(?:critic\/feedback\/request\:)|(?:\(yes\/no\)\:)|(?:(or\shit\senter)\:)/g;
-        setNeedsInput(regex.test(lastLine));
-        setInputLabel(lastLine.replace(/\x1b\[\d\d?m/g, " "));
     }, []);
 
     const onClose = useCallback(() => {
         console.log("closed");
         wsRef.current = null;
-    }, []);
-
-    const input = useCallback((s: string) => {
-        if (wsRef.current) {
-            wsRef.current.send(s);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (!wsRef.current) {
-            wsRef.current = new WebSocket("ws://localhost:1337/ws");
-            wsRef.current.onmessage = onMessage;
-            wsRef.current.onclose = onClose;
-        }
     }, []);
 
     useEffect(() => {
@@ -168,6 +240,11 @@ function Execute() {
         Object.values(nodeData).forEach((data) => {
             data!.setError(NodeError.None);
         });
+
+        // topological sort
+        console.log(edges);
+        const sorted = toposort(edges);
+        console.log(sorted);
 
         for (let i = 0; i < edges.length; i++) {
             const edge = edges[i];
@@ -189,10 +266,7 @@ function Execute() {
                     );
                 }
             } else {
-                if (
-                    source.type !== nodeKeys[1] ||
-                    target.type !== nodeKeys[1]
-                ) {
+                if (target.type === nodeKeys[3]) {
                     valid = false;
                     nodeData[source.id].setError(NodeError.NotCoder);
                     nodeData[target.id].setError(NodeError.NotCoder);
@@ -203,19 +277,33 @@ function Execute() {
         setIsValid(valid);
     }, [edges]);
 
+    const run = useCallback(() => {
+        if (!isValid || executing) {
+            return;
+        }
+        if (!wsRef.current) {
+            wsRef.current = new WebSocket("ws://localhost:1337/ws");
+            wsRef.current.onmessage = onMessage;
+            wsRef.current.onclose = onClose;
+        }
+        setExecuting(true);
+        while (nextStep()) {}
+    }, [isValid, executing, nextStep]);
+
     return (
         <>
             <ExecOutput
                 output={output}
-                needsInput={needsInput}
+                needsInput={false} // FIXME: should be dynamic
                 input={input}
-                inputLabel={inputLabel}
+                inputLabel={""}
             />
 
             <button
                 className={`bg-rose-200 ${
                     !isValid ? "opacity-50 cursor-not-allowed" : ""
                 } rounded px-2 py-1`}
+                onClick={run}
                 disabled={!isValid || executing}
             >
                 {executing ? "Running" : "Run"}
@@ -319,6 +407,7 @@ function App() {
                     >
                         {nodeKeys.map((key) => (
                             <button
+                                key={key}
                                 className="bg-rose-200 rounded px-2 py-1"
                                 onClick={genNode(key)}
                             >
