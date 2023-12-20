@@ -36,8 +36,10 @@ export class AfterBeforeData {
     public changeChoice: (choice: AfterChoice) => void;
     public setError: (error: NodeError) => void;
 
-    /// choice, changeChoice, prompt and setPrompt
-    /// should always be is procured from useState
+    /// choice, changeChoice, 
+    /// prompt, setPrompt
+    /// error , setError
+    /// should always be procured from useState
     constructor(
         id: string,
         type: NodeType, choice: AfterChoice, changeChoice: (_: AfterChoice) => void,
