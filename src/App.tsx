@@ -3,13 +3,14 @@ import ReactFlow, { Controls, Background, MiniMap, Panel } from "reactflow";
 import { nanoid } from "nanoid";
 import { shallow } from "zustand/shallow";
 import useStore, { RFState } from "./store";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AfterBeforeNode from "./nodes/AfterBeforeNode";
 import { NodeType } from "./nodes/NodeData";
 import InferenceNode from "./nodes/InferenceNode";
 import useNodeStore from "./nodes/node-store";
 
 import "reactflow/dist/style.css";
+import { NodeError } from "./nodes/AfterBeforeData";
 
 const selector = (state: RFState) => ({
     nodes: state.nodes,
@@ -21,14 +22,71 @@ const selector = (state: RFState) => ({
 });
 
 const nodeTypes = {
-    "AfterBeforeNode": AfterBeforeNode,
-    "InferenceNode": InferenceNode,
+    AfterBeforeNode: AfterBeforeNode,
+    InferenceNode: InferenceNode,
 };
 
 const nodeKeys = Object.keys(nodeTypes);
 
 const randint = (min: number, max: number) =>
     Math.floor(Math.random() * (max - min + 1)) + min;
+
+interface ExecOutputProps {
+    output: string[];
+    needsInput: boolean;
+    inputLabel?: string;
+    input: (_: string) => void;
+}
+
+function ExecOutput({
+    output,
+    needsInput,
+    input,
+    inputLabel,
+}: ExecOutputProps) {
+    const [processedOutput, setProcessedOutput] = useState<string[][]>([]);
+    const regex = /LLM ANSWER:\n((?:.|\n)*)\n\*{5}/g;
+
+    useEffect(() => {
+        console.log("output changed");
+        console.log(output);
+        const match = regex.exec(output.join("\n"));
+        if (!match) {
+            return;
+        }
+        const [_, ...answers] = match;
+        setProcessedOutput(answers.map((answer) => answer.split("\n")));
+    }, [output]);
+
+    return (
+        <>
+            <div className="flex flex-col space-y-2">
+                {processedOutput.map((answer, i) => (
+                    <div key={i} className="flex flex-col space-y-2">
+                        <div className="font-bold">Answer {i + 1}</div>
+                        <div className="bg-white p-2 rounded">
+                            {answer.map((line, i) => (
+                                <>
+                                    <div key={i}>{line}</div>
+                                    <br />
+                                </>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+            {needsInput && (
+                <div className="flex flex-col space-y-2">
+                    <div className="font-bold">{inputLabel}</div>
+                    <textarea
+                        className="bg-white p-2 rounded"
+                        onChange={(e) => input(e.target.value)}
+                    ></textarea>
+                </div>
+            )}
+        </>
+    );
+}
 
 function Execute() {
     const nodeData = useNodeStore((state) => state.nodeData, shallow);
@@ -46,13 +104,49 @@ function Execute() {
         return acc;
     }, {} as Record<string, string[]>);
     const [isValid, setIsValid] = useState(true);
+    const [executing, setExecuting] = useState(false);
+    const [needsInput, setNeedsInput] = useState(false);
+    const wsRef = useRef<WebSocket | null>(null);
+    const [output, setOutput] = useState<string[]>([]);
+
+    const onMessage = useCallback((e: MessageEvent) => {
+        console.log(e);
+        setOutput((prev) => [...prev, e.data]);
+        const lines = e.data.split("\n");
+        const lastLine = lines[lines.length - 1];
+        const regex = /(?:Choose\san\saction)/g;
+        setNeedsInput(regex.test(lastLine));
+    }, []);
+
+    const onClose = useCallback(() => {
+        console.log("closed");
+        wsRef.current = null;
+    }, []);
+
+    const input = useCallback((s: string) => {
+        if (wsRef.current) {
+            wsRef.current.send(s);
+        }
+    }, []);
 
     useEffect(() => {
+        if (!wsRef.current) {
+            wsRef.current = new WebSocket("ws://localhost:1337/ws");
+            wsRef.current.onmessage = onMessage;
+            wsRef.current.onclose = onClose;
+        }
+    }, []);
+
+    useEffect(() => {
+        if (executing) {
+            return;
+        }
+
         let valid = true;
 
-        // reset errors 
+        // reset errors
         Object.values(nodeData).forEach((data) => {
-            data!.setError(false);
+            data!.setError(NodeError.None);
         });
 
         for (let i = 0; i < edges.length; i++) {
@@ -72,13 +166,14 @@ function Execute() {
                 if (target.type === nodeKeys[0]) {
                     if (sourceData!.type === NodeType.Before) {
                         valid = false;
-                        sourceData!.setError(true);
+                        sourceData!.setError(NodeError.AfterAsChild);
+                        targetData!.setError(NodeError.BeforeAsParent);
                         continue;
                     }
                 } else if (target.type === nodeKeys[1]) {
                     if (sourceData!.type === NodeType.After) {
                         valid = false;
-                        sourceData!.setError(true);
+                        sourceData!.setError(NodeError.InferenceAsChild);
                         continue;
                     }
                 }
@@ -88,12 +183,12 @@ function Execute() {
                 if (target.type === nodeKeys[0]) {
                     if (targetData!.type === NodeType.Before) {
                         valid = false;
-                        targetData!.setError(true);
+                        targetData!.setError(NodeError.InferenceAsParent);
                         continue;
                     }
                 } else if (target.type === nodeKeys[1]) {
                     valid = false;
-                    targetData!.setError(true);
+                    targetData!.setError(NodeError.InferenceAsParent);
                     continue;
                 }
             }
@@ -110,14 +205,18 @@ function Execute() {
     }, [edges]);
 
     return (
-        <div className="flex flex-col space-y-2">
+        <>
+            <ExecOutput output={output} needsInput={needsInput} input={input} />
+
             <button
-                className="bg-rose-200 rounded px-2 py-1"
-                disabled={!isValid}
+                className={`bg-rose-200 ${
+                    !isValid ? "opacity-50 cursor-not-allowed" : ""
+                } rounded px-2 py-1`}
+                disabled={!isValid || executing}
             >
-                Generate Input
+                {executing ? "Running" : "Run"}
             </button>
-        </div>
+        </>
     );
 }
 
@@ -129,8 +228,8 @@ function App() {
 
     const nodePositions = useStore((state) => state.nodePositions, shallow);
     const addNode = useStore((state) => state.addNode, shallow);
-    const deleteNode = useStore((state) => state.deleteNode, shallow);
     const deleteEdge = useStore((state) => state.deleteEdge, shallow);
+    const getEdges = useStore((state) => state.getEdges, shallow);
 
     const getFreePosition = useCallback(() => {
         const currentPositions = Object.values(nodePositions()).sort((a, b) => {
@@ -168,71 +267,80 @@ function App() {
 
     const deleteHandler = useCallback(
         (e: KeyboardEvent) => {
+            console.log(e);
             if (e.key === "Delete") {
-                nodes.forEach((node) => {
-                    if (node.selected) {
-                        deleteNode(node.id);
-                    }
-                });
-                edges.forEach((edge) => {
+                getEdges().forEach((edge) => {
                     if (edge.selected) {
-                        deleteEdge(edge.id);
+                        console.log("deleting edge", edge);
+                        console.log("deleting edge", edge.id);
+                        deleteEdge(edge);
                     }
                 });
             }
         },
-        [nodes, edges]
+        [edges]
     );
 
     useEffect(() => {
+        console.log("adding event listener");
         document.addEventListener("keydown", deleteHandler);
 
         return () => {
+            console.log("removing event listener");
             document.removeEventListener("keydown", deleteHandler);
         };
     }, []);
 
     return (
         <>
-            <ReactFlow
-                nodes={nodes}
-                onNodesChange={onNodesChange}
-                edges={edges}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                nodeTypes={nodeTypes}
-            >
-                <Background />
-                <Controls
-                    position="bottom-left"
-                    className="flex justify-center"
-                />
-                <MiniMap />
-                <Panel
-                    position="top-left"
-                    className="flex justify-center space-x-2"
+            <div className="grid grid-cols-7 h-screen">
+                <ReactFlow
+                    className="col-span-5"
+                    nodes={nodes}
+                    onNodesChange={onNodesChange}
+                    edges={edges}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    nodeTypes={nodeTypes}
                 >
-                    <button
-                        className="bg-rose-200 rounded px-2 py-1"
-                        onClick={genNode(false, NodeType.Before)}
+                    <Background />
+                    <Controls
+                        position="bottom-left"
+                        className="flex justify-center"
+                    />
+                    <MiniMap />
+                    <Panel
+                        position="top-left"
+                        className="flex justify-center space-x-2"
                     >
-                        Before Inference
-                    </button>
-                    <button
-                        className="bg-rose-200 rounded px-2 py-1"
-                        onClick={genNode(false, NodeType.After)}
-                    >
-                        After Inference
-                    </button>
-                    <button
-                        className="bg-rose-200 rounded px-2 py-1"
-                        onClick={genNode(true)}
-                    >
-                        Inference
-                    </button>
+                        <button
+                            className="bg-rose-200 rounded px-2 py-1"
+                            onClick={genNode(false, NodeType.Before)}
+                        >
+                            Before Inference
+                        </button>
+                        <button
+                            className="bg-rose-200 rounded px-2 py-1"
+                            onClick={genNode(false, NodeType.After)}
+                        >
+                            After Inference
+                        </button>
+                        <button
+                            className="bg-rose-200 rounded px-2 py-1"
+                            onClick={genNode(true)}
+                        >
+                            Inference
+                        </button>
+                        <button className="bg-rose-200 rounded px-2 py-1">
+                            Panel
+                        </button>
+                    </Panel>
+                </ReactFlow>
+
+                <div className="col-span-2 bg-purple-50 flex flex-col p-4">
                     <Execute />
-                </Panel>
-            </ReactFlow>
+                </div>
+            </div>
         </>
     );
 }

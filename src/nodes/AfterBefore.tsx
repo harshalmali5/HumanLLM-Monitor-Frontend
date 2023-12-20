@@ -18,7 +18,7 @@ import Trash from "../TrashIcon";
 
 const AfterBefore = (p: AfterBeforeProps) => {
     const { data } = p;
-    const color = data.type === NodeType.After ? "bg-rose-300" : "bg-red-100";
+    const color = data.type === NodeType.After ? "bg-rose-100" : "bg-yellow-100";
     const [[w, h], setWH] = useState([256, 256]);
     const globlaNodeDelete = useGlobalStore(
         (state) => state.deleteNode,

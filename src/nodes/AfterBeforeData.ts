@@ -15,16 +15,26 @@ export enum BeforeChoice {
     UsePremiumLLM = 5,
 }
 
+export enum NodeError {
+    None = 0,
+    InferenceAsParent = 1,
+    InferenceAsChild = 2,
+    BeforeAsParent = 3,
+    BeforeAsChild = 4,
+    AfterAsParent = 5,
+    AfterAsChild = 6,
+}
+
 export class AfterBeforeData {
     readonly id: string;
     readonly choice: AfterChoice | BeforeChoice;
     readonly prompt: string;
-    readonly error: boolean;
+    readonly error: NodeError;
     
     readonly type: NodeType;
     public setPrompt: (prompt: string) => void;
     public changeChoice: (choice: AfterChoice) => void;
-    public setError: (error: boolean) => void;
+    public setError: (error: NodeError) => void;
 
     /// choice, changeChoice, prompt and setPrompt
     /// should always be is procured from useState
@@ -32,7 +42,7 @@ export class AfterBeforeData {
         id: string,
         type: NodeType, choice: AfterChoice, changeChoice: (_: AfterChoice) => void,
         prompt: string, setPrompt: (_: string) => void,
-            error: boolean, setError: (_: boolean) => void,
+            error: NodeError, setError: (_: NodeError) => void,
         ) {
         this.choice = choice;
         this.changeChoice = changeChoice;
