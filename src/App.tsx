@@ -45,17 +45,19 @@ function ExecOutput({
     inputLabel,
 }: ExecOutputProps) {
     const [processedOutput, setProcessedOutput] = useState<string[][]>([]);
+    const [parsedTill, setParsedTill] = useState(0);
     const regex = /LLM ANSWER:\n((?:.|\n)*)\n\*{5}/g;
 
     useEffect(() => {
         console.log("output changed");
         console.log(output);
-        const match = regex.exec(output.join("\n"));
+        const match = regex.exec(output.slice(parsedTill).join("\n"));
         if (!match) {
             return;
         }
         const [_, ...answers] = match;
         setProcessedOutput(answers.map((answer) => answer.split("\n")));
+        setParsedTill(output.length);
     }, [output]);
 
     return (
