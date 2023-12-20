@@ -70,6 +70,7 @@ function ExecOutput({
 
     return (
         <>
+            {/* FIXME: show which node an answer is related to! */}
             <div className="flex flex-col space-y-2">
                 {processedOutput.map((answer, i) => (
                     <div key={i} className="flex flex-col space-y-2">
@@ -513,7 +514,7 @@ function App() {
                     </Panel>
                 </ReactFlow>
 
-                <div className="col-span-3 bg-purple-50 flex flex-col p-4">
+                <div className="col-span-3 bg-purple-50 flex flex-col p-4 h-screen overflow-y-scroll">
                     <Execute />
                 </div>
             </div>
