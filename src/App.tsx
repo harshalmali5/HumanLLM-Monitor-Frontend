@@ -52,6 +52,8 @@ const endRegex = /\*{5}/;
 const startRefinedRegex = /REFINED ANSWER/;
 const beforeInferenceRegex = /or directly hit Enter to proceed to inference/;
 const refinedEnd = /Is the task refinement adequate/;
+const criticRegex = /Provide critic\/feedback\/request/;
+const chooseAnAction = /Choose an action or hit Enter/;
 
 function ExecOutput({ output }: ExecOutputProps) {
     const [processedOutput, setProcessedOutput] = useState<ExecAnswer[]>([]);
@@ -191,13 +193,11 @@ function useExecution(
             const sourceData = nodeData[source.id];
             sourceData?.setBorderCss("border-2 border-green-500");
 
-            waitWsMessage(/Choose an action or hit Enter/)
+            waitWsMessage(chooseAnAction)
                 .then(async () => {
                     if (target.type === "Critic") {
                         sendData("B\n");
-                        await waitWsMessage(
-                            /Provide critic\/feedback\/request/
-                        );
+                        await waitWsMessage(criticRegex);
                         feedbackReceivedRef.current = false;
                         setNeedsFeedback(true);
                         const interval = setInterval(async () => {
@@ -307,8 +307,14 @@ function Execute() {
     );
 
     const onClose = useCallback(() => {
-        setExecuting(false);
         wsRef.current = null;
+    }, []);
+
+    const stopExecution = useCallback(() => {
+        setExecuting(false);
+        setOutput([]);
+        processedIx.current = 0;
+        wsRef.current?.close();
     }, []);
 
     useEffect(() => {
@@ -374,6 +380,14 @@ function Execute() {
         });
     }, [isValid, executing, nextStep]);
 
+    const handleClick = () => {
+        if (executing) {
+            stopExecution();
+        } else {
+            run();
+        }
+    };
+
     return (
         <>
             <ExecOutput output={output} />
@@ -386,10 +400,10 @@ function Execute() {
                 className={`bg-rose-200 ${
                     !isValid ? "opacity-50 cursor-not-allowed" : ""
                 } rounded px-2 py-1`}
-                onClick={run}
-                disabled={!isValid || executing}
+                onClick={handleClick}
+                disabled={!isValid}
             >
-                {executing ? "Running" : "Run"}
+                {executing ? "Stop" : "Run"}
             </button>
         </>
     );
