@@ -1,7 +1,7 @@
 import { NodeProps } from "reactflow";
 import InferenceNode from "./InferenceNode";
 import useNodeStore from "./node-store";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { InferenceNodeData, NodeError } from "./InferenceData";
 import { NodeType } from "./node-types";
 

@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { NodeType } from "./nodes/node-types";
 import useNodeStore from "./nodes/node-store";
 import Markdown from "react-markdown";
-import { InferenceNodeData, NodeError } from "./nodes/InferenceData";
+import { NodeError } from "./nodes/InferenceData";
 import Inference from "./nodes/Inference";
 
 import "reactflow/dist/style.css";

@@ -1,5 +1,5 @@
 import { createWithEqualityFn } from 'zustand/traditional';
-import { InferenceNodeData, NodeError } from './InferenceData';
+import { InferenceNodeData } from './InferenceData';
 
 export type NodeState = {
     nodeData: {
