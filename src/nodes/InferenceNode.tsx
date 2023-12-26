@@ -14,7 +14,7 @@ const strigifyError = (error: NodeError) => {
         case NodeError.FirstIsNotCoach:
             return "First is not Coach";
         case NodeError.LastIsNotCapitalizer:
-            return "Last is not Coder";
+            return "Last is not Capitalizer";
         default:
             return "";
     }
