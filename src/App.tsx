@@ -12,10 +12,11 @@ import useStore, { RFState } from "./store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NodeType } from "./nodes/node-types";
 import useNodeStore from "./nodes/node-store";
-
-import "reactflow/dist/style.css";
+import Markdown from "react-markdown";
 import { NodeError } from "./nodes/InferenceData";
 import Inference from "./nodes/Inference";
+
+import "reactflow/dist/style.css";
 
 const selector = (state: RFState) => ({
     nodes: state.nodes,
@@ -52,20 +53,47 @@ function ExecOutput({
     inputLabel,
 }: ExecOutputProps) {
     const [processedOutput, setProcessedOutput] = useState<string[][]>([]);
-    const [parsedTill, setParsedTill] = useState(0);
-    const regex = /LLM ANSWER:\n((?:.|\n)*)\n\*{5}/g;
     const [inputValue, setInputValue] = useState("");
+    const parsedTillRef = useRef(0);
+    const seenTill = useRef(0);
+    const startRegex = /LLM ANSWER/;
+    const endRegex = /\*{5}/;
 
     useEffect(() => {
-        console.log("output changed");
-        console.log(output);
-        const match = regex.exec(output.slice(parsedTill).join("\n"));
-        if (!match) {
-            return;
+        if (output.length == seenTill.current) return;
+        seenTill.current = output.length;
+
+        const out = output
+            .slice(parsedTillRef.current)
+            .map((x) => x.split("\n"));
+
+        const newAnswers: string[][] = [];
+        let parsedTill = 0;
+
+        // O(n) where n = number of lines
+        for (let i = 0; i < out.length; i++) {
+            for (let j = 0; j < out[i].length; j++) {
+                if (startRegex.test(out[i][j])) {
+                    console.log("found start", out[i]);
+                    const answer: string[] = [];
+                    for (let k = j + 1; k < out[i].length; k++) {
+                        console.log(out[j]);
+                        if (endRegex.test(out[i][k])) {
+                            j = k;
+                            parsedTill = i;
+                            break;
+                        }
+                        answer.push(out[i][k]);
+                    }
+                    newAnswers.push(answer);
+                }
+            }
         }
-        const [_, ...answers] = match;
-        setProcessedOutput((p) => [...p, ...answers.map((x) => x.split("\n"))]);
-        setParsedTill(output.length);
+
+        if (newAnswers.length > 0) {
+            parsedTillRef.current += parsedTill;
+            setProcessedOutput((prev) => [...prev, ...newAnswers]);
+        }
     }, [output]);
 
     return (
@@ -77,10 +105,7 @@ function ExecOutput({
                         <div className="font-bold">Answer {i + 1}</div>
                         <div className="bg-white p-2 rounded">
                             {answer.map((line, i) => (
-                                <div key={i}>
-                                    <div>{line}</div>
-                                    <br />
-                                </div>
+                                <Markdown key={i}>{line}</Markdown>
                             ))}
                         </div>
                     </div>
@@ -149,11 +174,13 @@ function useExecution(
             // pause execution here and wait for the websocket to send a message
             waitWsMessage()
                 .then(() => {
+                    console.log("ws responded");
                     if (sourceData.type === targetData.type) {
                         sendData("E"); // go before inference
                     }
                     sendData("\n");
                     resolve(true);
+                    edgeIx.current++;
                 })
                 .catch(() => {
                     resolve(false);
@@ -165,7 +192,7 @@ function useExecution(
     return { nextStep };
 }
 
-function toposort(edges: Edge[]): string[] {
+function toposort(edges: Edge[]): Edge[] {
     const nodeMap = edges.reduce((acc, edge) => {
         if (!acc[edge.source]) {
             acc[edge.source] = [];
@@ -190,7 +217,14 @@ function toposort(edges: Edge[]): string[] {
 
     Object.keys(nodeMap).forEach((node) => dfs(node));
 
-    return sorted.reverse();
+    const nodeIds = sorted.reverse();
+    const nodeIdToIx = Object.fromEntries(nodeIds.map((x, i) => [x, i]));
+    console.log(nodeIdToIx);
+
+    const sortedEdges = edges.sort(
+        (a, b) => nodeIdToIx[a.source] - nodeIdToIx[b.source]
+    );
+    return sortedEdges;
 }
 
 function Execute() {
@@ -235,7 +269,7 @@ function Execute() {
         });
     }, []);
 
-    const { nextStep } = useExecution(edges, input, waitWsMessage);
+    const { nextStep } = useExecution(toposort(edges), input, waitWsMessage);
 
     const onClose = useCallback(() => {
         console.log("closed");
@@ -253,11 +287,6 @@ function Execute() {
         Object.values(nodeData).forEach((data) => {
             data!.setError(NodeError.None);
         });
-
-        // topological sort
-        console.log(edges);
-        const sorted = toposort(edges);
-        console.log(sorted);
 
         for (let i = 0; i < edges.length; i++) {
             const edge = edges[i];
@@ -456,12 +485,9 @@ function App() {
 
     const deleteHandler = useCallback(
         (e: KeyboardEvent) => {
-            console.log(e);
             if (e.key === "Delete") {
                 getEdges().forEach((edge) => {
                     if (edge.selected) {
-                        console.log("deleting edge", edge);
-                        console.log("deleting edge", edge.id);
                         deleteEdge(edge);
                     }
                 });
