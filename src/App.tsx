@@ -61,6 +61,11 @@ function ExecOutput({ output }: ExecOutputProps) {
     const seenTill = useRef(0);
 
     useEffect(() => {
+        if (!output.length) {
+            setProcessedOutput([]);
+            seenTill.current = 0;
+            parsedTillRef.current = 0;
+        }
         if (output.length == seenTill.current) return;
         seenTill.current = output.length;
 
