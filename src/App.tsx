@@ -74,10 +74,8 @@ function ExecOutput({
         for (let i = 0; i < out.length; i++) {
             for (let j = 0; j < out[i].length; j++) {
                 if (startRegex.test(out[i][j])) {
-                    console.log("found start", out[i]);
                     const answer: string[] = [];
                     for (let k = j + 1; k < out[i].length; k++) {
-                        console.log(out[j]);
                         if (endRegex.test(out[i][k])) {
                             j = k;
                             parsedTill = i;
@@ -152,8 +150,6 @@ function useExecution(
         const p = new Promise<boolean>((resolve) => {
             const remainingEdges = edges.slice(edgeIx.current);
 
-            console.log("remaining edges", remainingEdges);
-
             if (remainingEdges.length === 0) {
                 return false;
             }
@@ -174,7 +170,6 @@ function useExecution(
             // pause execution here and wait for the websocket to send a message
             waitWsMessage()
                 .then(() => {
-                    console.log("ws responded");
                     if (sourceData.type === targetData.type) {
                         sendData("E"); // go before inference
                     }
@@ -219,7 +214,6 @@ function toposort(edges: Edge[]): Edge[] {
 
     const nodeIds = sorted.reverse();
     const nodeIdToIx = Object.fromEntries(nodeIds.map((x, i) => [x, i]));
-    console.log(nodeIdToIx);
 
     const sortedEdges = edges.sort(
         (a, b) => nodeIdToIx[a.source] - nodeIdToIx[b.source]
@@ -243,13 +237,11 @@ function Execute() {
 
     const input = useCallback((s: string) => {
         if (wsRef.current) {
-            console.log("sending", s);
             wsRef.current.send(s);
         }
     }, []);
 
     const onMessage = useCallback((e: MessageEvent) => {
-        console.log(e);
         setOutput((prev) => [...prev, e.data]);
     }, []);
 
@@ -272,7 +264,6 @@ function Execute() {
     const { nextStep } = useExecution(toposort(edges), input, waitWsMessage);
 
     const onClose = useCallback(() => {
-        console.log("closed");
         wsRef.current = null;
     }, []);
 
@@ -422,7 +413,6 @@ function App() {
     const addEdge = useStore((state) => state.addEdge, shallow);
 
     useEffect(() => {
-        console.log("adding nodes");
         if (generatedRef.current) {
             return;
         }
@@ -476,7 +466,6 @@ function App() {
     );
 
     useEffect(() => {
-        console.log("adding nodes");
         if (generatedRef.current) {
             return;
         }
@@ -497,11 +486,9 @@ function App() {
     );
 
     useEffect(() => {
-        console.log("adding event listener");
         document.addEventListener("keydown", deleteHandler);
 
         return () => {
-            console.log("removing event listener");
             document.removeEventListener("keydown", deleteHandler);
         };
     }, []);
