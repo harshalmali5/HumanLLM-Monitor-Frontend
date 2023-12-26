@@ -45,15 +45,18 @@ interface ExecOutputProps {
     output: string[];
 }
 
+const beforeInferenceRegex = /or directly hit Enter to proceed to inference/;
+const refinedEnd = /Is the task refinement adequate/;
+
 function ExecOutput({ output }: ExecOutputProps) {
-    const [processedOutput, setProcessedOutput] = useState<string[][]>([]);
+    const [processedOutput, setProcessedOutput] = useState<
+        [string[], boolean][]
+    >([]);
     const parsedTillRef = useRef(0);
     const seenTill = useRef(0);
     const startRegex = /LLM ANSWER/;
     const endRegex = /\*{5}/;
     const startRefinedRegex = /REFINED ANSWER/;
-    const endRefinedRegex =
-        /Is there anything specific you would like to be improved\?/;
 
     useEffect(() => {
         if (output.length == seenTill.current) return;
@@ -63,23 +66,28 @@ function ExecOutput({ output }: ExecOutputProps) {
             .slice(parsedTillRef.current)
             .map((x) => x.split("\n"));
 
-        const newAnswers: string[][] = [];
+        const newAnswers: [string[], boolean][] = [];
         let parsedTill = 0;
 
         // O(n) where n = number of lines
         for (let i = 0; i < out.length; i++) {
             for (let j = 0; j < out[i].length; j++) {
-                if (startRegex.test(out[i][j])) {
+                const llmAns = startRegex.test(out[i][j]);
+                const refinedAns = startRefinedRegex.test(out[i][j]);
+                if (llmAns || refinedAns) {
                     const answer: string[] = [];
                     for (let k = j + 1; k < out[i].length; k++) {
-                        if (endRegex.test(out[i][k])) {
+                        if (
+                            endRegex.test(out[i][k]) ||
+                            refinedEnd.test(out[i][k])
+                        ) {
                             j = k;
                             parsedTill = i;
                             break;
                         }
                         answer.push(out[i][k]);
                     }
-                    newAnswers.push(answer);
+                    newAnswers.push([answer, refinedAns]);
                 }
             }
         }
@@ -96,9 +104,11 @@ function ExecOutput({ output }: ExecOutputProps) {
             <div className="flex flex-col space-y-2">
                 {processedOutput.map((answer, i) => (
                     <div key={i} className="flex flex-col space-y-2">
-                        <div className="font-bold">Answer {i + 1}</div>
+                        <div className="font-bold">
+                            {answer[1] ? "Refined Answer" : "LLM Answer"}
+                        </div>
                         <div className="bg-white p-2 rounded">
-                            {answer.map((line, i) => (
+                            {answer[0].map((line, i) => (
                                 <Markdown key={i}>{line}</Markdown>
                             ))}
                         </div>
@@ -109,8 +119,6 @@ function ExecOutput({ output }: ExecOutputProps) {
     );
 }
 
-const beforeInferenceRegex = /or directly hit Enter to proceed to inference/;
-
 function useExecution(
     edges: Edge[],
     sendData: (_: string) => void,
@@ -120,10 +128,11 @@ function useExecution(
     const nodeData = useNodeStore((state) => state.nodeData, shallow);
     const edgeIx = useRef(0);
     const [needsFeedback, setNeedsFeedback] = useState(false);
-    const [feedback, setFeedback] = useState("");
     const feedbackReceivedRef = useRef(false);
 
     const FeedBackInput = () => {
+        const [feedback, setFeedback] = useState("");
+
         const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
             setFeedback(e.target.value);
         };
@@ -132,6 +141,7 @@ function useExecution(
             sendData(feedback + "\n");
             setFeedback("");
             setNeedsFeedback(false);
+            feedbackReceivedRef.current = true;
             edgeIx.current++;
         };
 
@@ -183,9 +193,12 @@ function useExecution(
                         );
                         feedbackReceivedRef.current = false;
                         setNeedsFeedback(true);
-                        const interval = setInterval(() => {
+                        const interval = setInterval(async () => {
                             if (feedbackReceivedRef.current) {
-                                sendData("yes"); // tell that response is adequate
+                                await waitWsMessage(refinedEnd);
+                                // y 
+                                // extra \n to skip before inference
+                                sendData("yes\ny\n\n"); 
                                 clearInterval(interval);
                                 resolve(true);
                             }
