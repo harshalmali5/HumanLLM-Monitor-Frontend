@@ -47,6 +47,9 @@ interface ExecOutputProps {
 
 type ExecAnswer = [string[], boolean];
 
+const startRegex = /LLM ANSWER/;
+const endRegex = /\*{5}/;
+const startRefinedRegex = /REFINED ANSWER/;
 const beforeInferenceRegex = /or directly hit Enter to proceed to inference/;
 const refinedEnd = /Is the task refinement adequate/;
 
@@ -54,9 +57,6 @@ function ExecOutput({ output }: ExecOutputProps) {
     const [processedOutput, setProcessedOutput] = useState<ExecAnswer[]>([]);
     const parsedTillRef = useRef(0);
     const seenTill = useRef(0);
-    const startRegex = /LLM ANSWER/;
-    const endRegex = /\*{5}/;
-    const startRefinedRegex = /REFINED ANSWER/;
 
     useEffect(() => {
         if (output.length == seenTill.current) return;
