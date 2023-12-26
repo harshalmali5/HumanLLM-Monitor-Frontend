@@ -91,7 +91,7 @@ function ExecOutput({
         }
 
         if (newAnswers.length > 0) {
-            parsedTillRef.current += parsedTill;
+            parsedTillRef.current += parsedTill + 1;
             setProcessedOutput((prev) => [...prev, ...newAnswers]);
         }
     }, [output]);
