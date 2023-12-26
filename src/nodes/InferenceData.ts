@@ -28,6 +28,7 @@ export class InferenceNodeData {
     readonly error: NodeError;
     readonly type: NodeType;
     public setError: (error: NodeError) => void;
+    public setBorderCss: (css: string) => void;
 
     /// error , setError
     /// should always be procured from useState
@@ -35,9 +36,11 @@ export class InferenceNodeData {
         id: string,
         type: NodeType,
         error: NodeError, setError: (_: NodeError) => void,
+        setBorderCss: (_: string) => void,
     ) {
         this.error = error;
         this.setError = setError;
+        this.setBorderCss = setBorderCss;
         this.type = type;
         this.id = id;
     }

@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { NodeType } from "./nodes/node-types";
 import useNodeStore from "./nodes/node-store";
 import Markdown from "react-markdown";
-import { NodeError } from "./nodes/InferenceData";
+import { InferenceNodeData, NodeError } from "./nodes/InferenceData";
 import Inference from "./nodes/Inference";
 
 import "reactflow/dist/style.css";
@@ -183,7 +183,13 @@ function useExecution(
             if (!source || !target) {
                 return false;
             }
-            // const targetData = nodeData[target.id];
+
+            Object.values(nodeData).forEach((data) => {
+                data!.setBorderCss("");
+            });
+
+            const sourceData = nodeData[source.id];
+            sourceData?.setBorderCss("border-2 border-green-500");
 
             waitWsMessage(/Choose an action or hit Enter/)
                 .then(async () => {
@@ -197,7 +203,6 @@ function useExecution(
                         const interval = setInterval(async () => {
                             if (feedbackReceivedRef.current) {
                                 await waitWsMessage(refinedEnd);
-                                // y
                                 // extra \n to skip before inference
                                 sendData("yes\ny\n\n");
                                 clearInterval(interval);
@@ -356,14 +361,12 @@ function Execute() {
         wsRef.current = new WebSocket("ws://localhost:1337/ws");
         wsRef.current.onclose = onClose;
         setExecuting(true);
-        function recPromise() {
-            nextStep().then((res) => {
-                if (res) {
-                    recPromise();
-                } else {
-                    setExecuting(false);
-                }
-            });
+        async function recPromise() {
+            let res = true;
+            while (res) {
+                res = await nextStep();
+            }
+            setExecuting(false);
         }
         waitWsMessage(beforeInferenceRegex).then(() => {
             sendData("\n");
