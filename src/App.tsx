@@ -45,13 +45,13 @@ interface ExecOutputProps {
     output: string[];
 }
 
+type ExecAnswer = [string[], boolean];
+
 const beforeInferenceRegex = /or directly hit Enter to proceed to inference/;
 const refinedEnd = /Is the task refinement adequate/;
 
 function ExecOutput({ output }: ExecOutputProps) {
-    const [processedOutput, setProcessedOutput] = useState<
-        [string[], boolean][]
-    >([]);
+    const [processedOutput, setProcessedOutput] = useState<ExecAnswer[]>([]);
     const parsedTillRef = useRef(0);
     const seenTill = useRef(0);
     const startRegex = /LLM ANSWER/;
@@ -66,7 +66,7 @@ function ExecOutput({ output }: ExecOutputProps) {
             .slice(parsedTillRef.current)
             .map((x) => x.split("\n"));
 
-        const newAnswers: [string[], boolean][] = [];
+        const newAnswers: ExecAnswer[] = [];
         let parsedTill = 0;
 
         // O(n) where n = number of lines
@@ -148,9 +148,10 @@ function useExecution(
         return (
             <>
                 <textarea
-                    className="bg-white p-2 rounded"
+                    className="bg-white p-2 my-2 rounded h-32 border-2 border-gray-300"
                     value={feedback}
                     onChange={onChange}
+                    rows={10}
                 ></textarea>
                 <button
                     className="bg-rose-200 rounded px-2 py-1"
@@ -186,7 +187,7 @@ function useExecution(
 
             waitWsMessage(/Choose an action or hit Enter/)
                 .then(async () => {
-                    if (source.type === "Critic") {
+                    if (target.type === "Critic") {
                         sendData("B\n");
                         await waitWsMessage(
                             /Provide critic\/feedback\/request/
@@ -196,10 +197,11 @@ function useExecution(
                         const interval = setInterval(async () => {
                             if (feedbackReceivedRef.current) {
                                 await waitWsMessage(refinedEnd);
-                                // y 
+                                // y
                                 // extra \n to skip before inference
-                                sendData("yes\ny\n\n"); 
+                                sendData("yes\ny\n\n");
                                 clearInterval(interval);
+                                edgeIx.current++;
                                 resolve(true);
                             }
                         }, 500);
@@ -373,7 +375,9 @@ function Execute() {
         <>
             <ExecOutput output={output} />
 
-            {needsFeedback && <FeedBackInput />}
+            <div className="flex flex-col space-y-2">
+                {needsFeedback && <FeedBackInput />}
+            </div>
 
             <button
                 className={`bg-rose-200 ${
