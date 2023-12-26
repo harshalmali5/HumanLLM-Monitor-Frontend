@@ -26,12 +26,9 @@ export enum NodeError {
 export class InferenceNodeData {
     readonly id: string;
     readonly error: NodeError;
-
     readonly type: NodeType;
     public setError: (error: NodeError) => void;
 
-    /// choice, changeChoice, 
-    /// prompt, setPrompt
     /// error , setError
     /// should always be procured from useState
     constructor(

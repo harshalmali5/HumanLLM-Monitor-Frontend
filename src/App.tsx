@@ -4,6 +4,7 @@ import ReactFlow, {
     MiniMap,
     Panel,
     Edge,
+    Node,
 } from "reactflow";
 
 import { nanoid } from "nanoid";
@@ -30,6 +31,7 @@ const selector = (state: RFState) => ({
 const nodeTypes = {
     Coach: Inference,
     Coder: Inference,
+    Critic: Inference,
     Validator: Inference,
     Capitalizer: Inference,
 };
@@ -41,23 +43,17 @@ const randint = (min: number, max: number) =>
 
 interface ExecOutputProps {
     output: string[];
-    needsInput: boolean;
-    inputLabel?: string;
-    input: (_: string) => void;
 }
 
-function ExecOutput({
-    output,
-    needsInput,
-    input,
-    inputLabel,
-}: ExecOutputProps) {
+function ExecOutput({ output }: ExecOutputProps) {
     const [processedOutput, setProcessedOutput] = useState<string[][]>([]);
-    const [inputValue, setInputValue] = useState("");
     const parsedTillRef = useRef(0);
     const seenTill = useRef(0);
     const startRegex = /LLM ANSWER/;
     const endRegex = /\*{5}/;
+    const startRefinedRegex = /REFINED ANSWER/;
+    const endRefinedRegex =
+        /Is there anything specific you would like to be improved\?/;
 
     useEffect(() => {
         if (output.length == seenTill.current) return;
@@ -109,44 +105,57 @@ function ExecOutput({
                     </div>
                 ))}
             </div>
-            {needsInput && (
-                <div className="flex flex-col space-y-2">
-                    <div className="font-bold">{inputLabel}</div>
-                    <textarea
-                        className="bg-white p-2 rounded"
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                    ></textarea>
-                    {/*
-                        FIXME: Do not use Inline onClick handlers
-                    */}
-                    <button
-                        className="bg-rose-200 rounded px-2 py-1"
-                        onClick={() => {
-                            input(inputValue);
-                            setInputValue("");
-                        }}
-                    >
-                        Submit
-                    </button>
-                </div>
-            )}
         </>
     );
 }
 
+const beforeInferenceRegex = /or directly hit Enter to proceed to inference/;
+
 function useExecution(
     edges: Edge[],
     sendData: (_: string) => void,
-    waitWsMessage: () => Promise<void>
+    waitWsMessage: (_: RegExp) => Promise<void>
 ) {
     const nodes = useStore((state) => state.nodes, shallow);
     const nodeData = useNodeStore((state) => state.nodeData, shallow);
     const edgeIx = useRef(0);
+    const [needsFeedback, setNeedsFeedback] = useState(false);
+    const [feedback, setFeedback] = useState("");
+    const feedbackReceivedRef = useRef(false);
+
+    const FeedBackInput = () => {
+        const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+            setFeedback(e.target.value);
+        };
+
+        const onSubmit = () => {
+            sendData(feedback + "\n");
+            setFeedback("");
+            setNeedsFeedback(false);
+            edgeIx.current++;
+        };
+
+        return (
+            <>
+                <textarea
+                    className="bg-white p-2 rounded"
+                    value={feedback}
+                    onChange={onChange}
+                ></textarea>
+                <button
+                    className="bg-rose-200 rounded px-2 py-1"
+                    onClick={onSubmit}
+                >
+                    Submit
+                </button>
+            </>
+        );
+    };
 
     const nextStep = useCallback(() => {
         // serialze the currect edge
         // send it to the server
+
         const p = new Promise<boolean>((resolve) => {
             const remainingEdges = edges.slice(edgeIx.current);
 
@@ -163,19 +172,29 @@ function useExecution(
             if (!source || !target) {
                 return false;
             }
-            const sourceData = nodeData[source.id];
-            const targetData = nodeData[target.id];
+            // const targetData = nodeData[target.id];
 
-            sendData(`\n`); // go skip before inference menu
-            // pause execution here and wait for the websocket to send a message
-            waitWsMessage()
-                .then(() => {
-                    if (sourceData.type === targetData.type) {
-                        sendData("E"); // go before inference
+            waitWsMessage(/Choose an action or hit Enter/)
+                .then(async () => {
+                    if (source.type === "Critic") {
+                        sendData("B\n");
+                        await waitWsMessage(
+                            /Provide critic\/feedback\/request/
+                        );
+                        feedbackReceivedRef.current = false;
+                        setNeedsFeedback(true);
+                        const interval = setInterval(() => {
+                            if (feedbackReceivedRef.current) {
+                                sendData("yes"); // tell that response is adequate
+                                clearInterval(interval);
+                                resolve(true);
+                            }
+                        }, 500);
+                    } else {
+                        sendData("\n\n");
+                        edgeIx.current++;
+                        resolve(true);
                     }
-                    sendData("\n");
-                    resolve(true);
-                    edgeIx.current++;
                 })
                 .catch(() => {
                     resolve(false);
@@ -184,7 +203,7 @@ function useExecution(
         return p;
     }, [edges, nodes, nodeData]);
 
-    return { nextStep };
+    return { nextStep, needsFeedback, FeedBackInput };
 }
 
 function toposort(edges: Edge[]): Edge[] {
@@ -228,14 +247,14 @@ function Execute() {
     const nodeMap = nodes.reduce((acc, node) => {
         acc[node.id] = node;
         return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, Node>);
     const [isValid, setIsValid] = useState(true);
     const [executing, setExecuting] = useState(false);
     const wsRef = useRef<WebSocket | null>(null);
     const [output, setOutput] = useState<string[]>([]);
     const processedIx = useRef(0);
 
-    const input = useCallback((s: string) => {
+    const sendData = useCallback((s: string) => {
         if (wsRef.current) {
             wsRef.current.send(s);
         }
@@ -246,7 +265,7 @@ function Execute() {
     }, []);
 
     // used to wait for the websocket to send a message
-    const waitWsMessage = useCallback(() => {
+    const waitWsMessage = useCallback((re: RegExp) => {
         return new Promise<void>((resolve, reject) => {
             if (!wsRef.current) {
                 reject();
@@ -254,16 +273,21 @@ function Execute() {
             }
             wsRef.current.onmessage = (e) => {
                 onMessage(e);
-                if (/(?:Choose an action)/.test(e.data)) {
+                if (re.test(e.data)) {
                     resolve();
                 }
             };
         });
     }, []);
 
-    const { nextStep } = useExecution(toposort(edges), input, waitWsMessage);
+    const { nextStep, needsFeedback, FeedBackInput } = useExecution(
+        toposort(edges),
+        sendData,
+        waitWsMessage
+    );
 
     const onClose = useCallback(() => {
+        setExecuting(false);
         wsRef.current = null;
     }, []);
 
@@ -289,20 +313,14 @@ function Execute() {
             if (i === 0) {
                 if (source.type !== nodeKeys[0]) {
                     valid = false;
-                    nodeData[source.id].setError(NodeError.FirstIsNotCoach);
+                    nodeData[source.id]?.setError(NodeError.FirstIsNotCoach);
                 }
             } else if (i === edges.length - 1) {
                 if (target.type !== nodeKeys[nodeKeys.length - 1]) {
                     valid = false;
-                    nodeData[target.id].setError(
+                    nodeData[target.id]?.setError(
                         NodeError.LastIsNotCapitalizer
                     );
-                }
-            } else {
-                if (target.type === nodeKeys[3]) {
-                    valid = false;
-                    nodeData[source.id].setError(NodeError.NotCoder);
-                    nodeData[target.id].setError(NodeError.NotCoder);
                 }
             }
         }
@@ -332,19 +350,17 @@ function Execute() {
                 }
             });
         }
-        waitWsMessage().then(() => {
+        waitWsMessage(beforeInferenceRegex).then(() => {
+            sendData("\n");
             recPromise();
         });
     }, [isValid, executing, nextStep]);
 
     return (
         <>
-            <ExecOutput
-                output={output}
-                needsInput={false} // FIXME: should be dynamic
-                input={input}
-                inputLabel={""}
-            />
+            <ExecOutput output={output} />
+
+            {needsFeedback && <FeedBackInput />}
 
             <button
                 className={`bg-rose-200 ${
@@ -374,14 +390,20 @@ const initNodes = [
     },
     {
         id: "3",
-        type: "Validator",
+        type: "Critic",
         position: { x: 100, y: 300 },
         data: "",
     },
     {
         id: "4",
-        type: "Capitalizer",
+        type: "Validator",
         position: { x: 100, y: 400 },
+        data: "",
+    },
+    {
+        id: "5",
+        type: "Capitalizer",
+        position: { x: 100, y: 500 },
         data: "",
     },
 ];
@@ -401,6 +423,11 @@ const initEdges = [
         id: "e3",
         source: "3",
         target: "4",
+    },
+    {
+        id: "e4",
+        source: "4",
+        target: "5",
     },
 ];
 

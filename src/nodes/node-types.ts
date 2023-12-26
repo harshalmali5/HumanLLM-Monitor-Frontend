@@ -3,4 +3,5 @@ export enum NodeType {
     Capitalizer = 2,
     Coach = 3,
     Validator = 4,
+    Critic = 5,
 };
