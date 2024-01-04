@@ -43,16 +43,10 @@ const randint = (min: number, max: number) =>
 
 interface ExecOutputProps {
     output: string[];
+    edges: Edge[];
 }
 
-enum AnswerType {
-    Other = 0,
-    Coding,
-    Validation,
-    Refined,
-}
-
-type ExecAnswer = [string[], AnswerType];
+type ExecAnswer = [string[], boolean];
 
 const startRegex = /LLM ANSWER/;
 const endRegex = /\*{5}\s\w+/;
@@ -61,13 +55,21 @@ const beforeInferenceRegex = /or directly hit Enter to proceed to inference/;
 const refinedEnd = /Is the task refinement adequate/;
 const criticRegex = /Provide critic\/feedback\/request/;
 const chooseAnAction = /Choose an action or hit Enter/;
-const ValidationAgent = /ValidationAgent/;
-const CodingAgent = /CodingAgent/;
 
-function ExecOutput({ output }: ExecOutputProps) {
+function ExecOutput({ output, edges }: ExecOutputProps) {
     const [processedOutput, setProcessedOutput] = useState<ExecAnswer[]>([]);
     const parsedTillRef = useRef(0);
     const seenTill = useRef(0);
+    const nodeMap = useNodeStore((state) => state.nodeData, shallow);
+    const executionOrder = edges.map((edge) => edge.source);
+    const selectedIds = Object.entries(nodeMap)
+        .filter(([_, data]) => data!.selected)
+        .map(([id, _]) => id);
+
+    useEffect(() => {
+        console.log(executionOrder)
+        console.log(processedOutput);
+    }, [nodeMap, selectedIds, edges]);
 
     useEffect(() => {
         if (!output.length) {
@@ -92,7 +94,6 @@ function ExecOutput({ output }: ExecOutputProps) {
                 const refinedAns = startRefinedRegex.test(out[i][j]);
                 if (llmAns || refinedAns) {
                     const answer: string[] = [];
-                    let answerType = AnswerType.Other;
                     let refinedMatch = false;
                     for (let k = j + 1; k < out[i].length; k++) {
                         if (
@@ -101,18 +102,14 @@ function ExecOutput({ output }: ExecOutputProps) {
                         ) {
                             j = k;
                             parsedTill = i;
-                            if (ValidationAgent.test(out[i][k])) {
-                                answerType = AnswerType.Validation;
-                            } else if (CodingAgent.test(out[i][k])) {
-                                answerType = AnswerType.Coding;
-                            } else if (refinedMatch) {
-                                answerType = AnswerType.Refined;
-                            }
                             break;
                         }
                         answer.push(out[i][k]);
                     }
-                    newAnswers.push([answer, answerType]);
+                    newAnswers.push([
+                        answer,
+                        refinedMatch,
+                    ]);
                 }
             }
         }
@@ -127,18 +124,22 @@ function ExecOutput({ output }: ExecOutputProps) {
         <>
             {/* FIXME: show which node an answer is related to! */}
             <div className="flex flex-col space-y-2">
-                {processedOutput.map((answer, i) => (
-                    <div key={i} className="flex flex-col space-y-2">
-                        <div className="font-bold">
-                            {answer[1] ? "Refined Answer" : "LLM Answer"}
+                {processedOutput
+                    .filter(
+                        (_, i) => !selectedIds.length || selectedIds.includes(executionOrder[i])
+                    )
+                    .map((answer, i) => (
+                        <div key={i} className="flex flex-col space-y-2">
+                            <div className="font-bold">
+                                {answer[1] ? "Refined Answer" : "LLM Answer"}
+                            </div>
+                            <div className="bg-white p-2 rounded">
+                                {answer[0].map((line, i) => (
+                                    <Markdown key={i}>{line}</Markdown>
+                                ))}
+                            </div>
                         </div>
-                        <div className="bg-white p-2 rounded">
-                            {answer[0].map((line, i) => (
-                                <Markdown key={i}>{line}</Markdown>
-                            ))}
-                        </div>
-                    </div>
-                ))}
+                    ))}
             </div>
         </>
     );
@@ -215,6 +216,11 @@ function useExecution(
 
             const targetData = nodeData[target.id];
             targetData?.setBorderCss("border-2 border-green-500");
+
+            if (edgeIx.current === nodes.length) {
+                resolve(false);
+                return;
+            }
 
             waitWsMessage(chooseAnAction)
                 .then(async () => {
@@ -323,8 +329,9 @@ function Execute() {
         });
     }, []);
 
+    const toposortedEdges = toposort(edges);
     const { nextStep, needsFeedback, FeedBackInput } = useExecution(
-        toposort(edges),
+        toposortedEdges,
         sendData,
         waitWsMessage
     );
@@ -413,7 +420,7 @@ function Execute() {
 
     return (
         <>
-            <ExecOutput output={output} />
+            <ExecOutput output={output} edges={toposortedEdges} />
 
             <div className="flex flex-col space-y-2">
                 {needsFeedback && <FeedBackInput />}

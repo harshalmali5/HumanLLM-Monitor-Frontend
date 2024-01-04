@@ -1,16 +1,17 @@
 import { NodeProps } from "reactflow";
 import InferenceNode from "./InferenceNode";
 import useNodeStore from "./node-store";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { InferenceNodeData, NodeError } from "./InferenceData";
 import { NodeType } from "./node-types";
 
 const Inference = (p: NodeProps) => {
-    const { id, type } = p;
+    const { id, type, selected } = p;
     const addNode = useNodeStore((state) => state.addNode);
 
     const [error, setError] = useState<NodeError>(NodeError.None);
     const [borderCss, setBorderCss] = useState<string>("");
+    const [localSelected, setLocalSelected] = useState<boolean>(false);
 
     let nodeType;
 
@@ -36,10 +37,17 @@ const Inference = (p: NodeProps) => {
         id,
         nodeType,
         error,
+        localSelected,
         setError,
-        setBorderCss
+        setBorderCss,
+        setLocalSelected
     );
     addNode(data.id, data);
+
+    
+    useEffect(() => {
+        setLocalSelected(selected);
+    }, [selected]);
 
     const props = {
         ...p,
