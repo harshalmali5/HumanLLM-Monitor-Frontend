@@ -195,8 +195,8 @@ function useExecution(
                 data!.setBorderCss("");
             });
 
-            const sourceData = nodeData[source.id];
-            sourceData?.setBorderCss("border-2 border-green-500");
+            const targetData = nodeData[target.id];
+            targetData?.setBorderCss("border-2 border-green-500");
 
             waitWsMessage(chooseAnAction)
                 .then(async () => {
