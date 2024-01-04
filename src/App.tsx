@@ -45,15 +45,24 @@ interface ExecOutputProps {
     output: string[];
 }
 
-type ExecAnswer = [string[], boolean];
+enum AnswerType {
+    Other = 0,
+    Coding,
+    Validation,
+    Refined,
+}
+
+type ExecAnswer = [string[], AnswerType];
 
 const startRegex = /LLM ANSWER/;
-const endRegex = /\*{5}/;
+const endRegex = /\*{5}\s\w+/;
 const startRefinedRegex = /REFINED ANSWER/;
 const beforeInferenceRegex = /or directly hit Enter to proceed to inference/;
 const refinedEnd = /Is the task refinement adequate/;
 const criticRegex = /Provide critic\/feedback\/request/;
 const chooseAnAction = /Choose an action or hit Enter/;
+const ValidationAgent = /ValidationAgent/;
+const CodingAgent = /CodingAgent/;
 
 function ExecOutput({ output }: ExecOutputProps) {
     const [processedOutput, setProcessedOutput] = useState<ExecAnswer[]>([]);
@@ -83,18 +92,27 @@ function ExecOutput({ output }: ExecOutputProps) {
                 const refinedAns = startRefinedRegex.test(out[i][j]);
                 if (llmAns || refinedAns) {
                     const answer: string[] = [];
+                    let answerType = AnswerType.Other;
+                    let refinedMatch = false;
                     for (let k = j + 1; k < out[i].length; k++) {
                         if (
                             endRegex.test(out[i][k]) ||
-                            refinedEnd.test(out[i][k])
+                            (refinedMatch = refinedEnd.test(out[i][k]))
                         ) {
                             j = k;
                             parsedTill = i;
+                            if (ValidationAgent.test(out[i][k])) {
+                                answerType = AnswerType.Validation;
+                            } else if (CodingAgent.test(out[i][k])) {
+                                answerType = AnswerType.Coding;
+                            } else if (refinedMatch) {
+                                answerType = AnswerType.Refined;
+                            }
                             break;
                         }
                         answer.push(out[i][k]);
                     }
-                    newAnswers.push([answer, refinedAns]);
+                    newAnswers.push([answer, answerType]);
                 }
             }
         }
