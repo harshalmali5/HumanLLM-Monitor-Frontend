@@ -11,13 +11,14 @@ import { nanoid } from "nanoid";
 import { shallow } from "zustand/shallow";
 import useStore, { RFState } from "./store";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { NodeType } from "./nodes/node-types";
+import { NodeType } from "./nodes/NodeData";
 import useNodeStore from "./nodes/node-store";
 import Markdown from "react-markdown";
-import { NodeError } from "./nodes/InferenceData";
+import { NodeError } from "./nodes/error";
 import Inference from "./nodes/Inference";
 
 import "reactflow/dist/style.css";
+import OptionN from "./nodes/Option";
 
 const selector = (state: RFState) => ({
     nodes: state.nodes,
@@ -34,7 +35,13 @@ const nodeTypes = {
     Critic: Inference,
     Validator: Inference,
     Capitalizer: Inference,
+    After: OptionN,
+    Before: OptionN,
 };
+
+const CapitalizerNodeType = "Capitalizer";
+const AfterNodeType = "After";
+const BeforeNodeType = "Before";
 
 const nodeKeys = Object.keys(nodeTypes);
 
@@ -51,7 +58,7 @@ type ExecAnswer = [string[], boolean];
 const startRegex = /LLM ANSWER/;
 const endRegex = /\*{5}\s\w+/;
 const startRefinedRegex = /REFINED ANSWER/;
-const beforeInferenceRegex = /or directly hit Enter to proceed to inference/;
+const beforeInferenceRegex = /or hit Enter for inference/;
 const refinedEnd = /Is the task refinement adequate/;
 const criticRegex = /Provide critic\/feedback\/request/;
 const chooseAnAction = /Choose an action or hit Enter/;
@@ -63,13 +70,8 @@ function ExecOutput({ output, edges }: ExecOutputProps) {
     const nodeMap = useNodeStore((state) => state.nodeData, shallow);
     const executionOrder = edges.map((edge) => edge.source);
     const selectedIds = Object.entries(nodeMap)
-        .filter(([_, data]) => data!.selected)
+        .filter(([_, data]) => data.type === NodeType.Inference && data.InferenceData?.selected)
         .map(([id, _]) => id);
-
-    useEffect(() => {
-        console.log(executionOrder)
-        console.log(processedOutput);
-    }, [nodeMap, selectedIds, edges]);
 
     useEffect(() => {
         if (!output.length) {
@@ -211,11 +213,13 @@ function useExecution(
             }
 
             Object.values(nodeData).forEach((data) => {
-                data!.setBorderCss("");
+                if (data.type === NodeType.Inference) {
+                    data.InferenceData?.setBorderCss("");
+                }
             });
 
             const targetData = nodeData[target.id];
-            targetData?.setBorderCss("border-2 border-green-500");
+            targetData?.InferenceData?.setBorderCss("border-4 border-red-500");
 
             if (edgeIx.current === nodes.length) {
                 resolve(false);
@@ -224,25 +228,41 @@ function useExecution(
 
             waitWsMessage(chooseAnAction)
                 .then(async () => {
-                    if (target.type === "Critic") {
-                        sendData("B\n");
-                        await waitWsMessage(criticRegex);
-                        feedbackReceivedRef.current = false;
-                        setNeedsFeedback(true);
-                        const interval = setInterval(async () => {
-                            if (feedbackReceivedRef.current) {
-                                await waitWsMessage(refinedEnd);
-                                // extra \n to skip before inference
-                                sendData("yes\ny\n\n");
-                                clearInterval(interval);
-                                edgeIx.current++;
-                                resolve(true);
-                            }
-                        }, 500);
-                    } else {
-                        sendData("\n\n");
-                        edgeIx.current++;
-                        resolve(true);
+                    switch (target.type) {
+                        case "Critic": {
+                            sendData("B\n");
+                            await waitWsMessage(criticRegex);
+                            feedbackReceivedRef.current = false;
+                            setNeedsFeedback(true);
+                            const interval = setInterval(async () => {
+                                if (feedbackReceivedRef.current) {
+                                    await waitWsMessage(refinedEnd);
+                                    // extra \n to skip before inference
+                                    sendData("yes\ny\n\n");
+                                    clearInterval(interval);
+                                    edgeIx.current++;
+                                    resolve(true);
+                                }
+                            }, 500);
+                            break;
+                        }
+                        case "After": {
+                            sendData(targetData?.OptionData?.choice + "\n");
+                            edgeIx.current++;
+                            resolve(true);
+                            break;
+                        }
+                        case "Before": {
+                            sendData(targetData?.OptionData?.choice + "\n");
+                            edgeIx.current++;
+                            resolve(true);
+                            break;
+                        }
+                        default: {
+                            sendData("\n\n");
+                            edgeIx.current++;
+                            resolve(true);
+                        }
                     }
                 })
                 .catch(() => {
@@ -356,7 +376,7 @@ function Execute() {
 
         // reset errors
         Object.values(nodeData).forEach((data) => {
-            data!.setError(NodeError.None);
+            data?.InferenceData?.setError(NodeError.None);
         });
 
         for (let i = 0; i < edges.length; i++) {
@@ -369,15 +389,24 @@ function Execute() {
             if (i === 0) {
                 if (source.type !== nodeKeys[0]) {
                     valid = false;
-                    nodeData[source.id]?.setError(NodeError.FirstIsNotCoach);
+                    nodeData[source.id]?.InferenceData?.setError(NodeError.FirstIsNotCoach);
                 }
             } else if (i === edges.length - 1) {
-                if (target.type !== nodeKeys[nodeKeys.length - 1]) {
+                if (target.type !== CapitalizerNodeType) {
                     valid = false;
-                    nodeData[target.id]?.setError(
+                    nodeData[target.id]?.InferenceData?.setError(
                         NodeError.LastIsNotCapitalizer
                     );
                 }
+            } else if (source.type == BeforeNodeType && target.type === AfterNodeType) {
+                valid = false;
+                nodeData[target.id]?.OptionData?.setError(NodeError.BeforeThenAfter);
+            } else if (source.type === AfterNodeType && target.type === AfterNodeType) {
+                valid = false;
+                nodeData[target.id]?.OptionData?.setError(NodeError.TwoAfter);
+            } else if (source.type === BeforeNodeType && target.type === BeforeNodeType) {
+                valid = false;
+                nodeData[target.id]?.OptionData?.setError(NodeError.TwoBefore);
             }
         }
 
@@ -405,8 +434,8 @@ function Execute() {
             setExecuting(false);
         }
         waitWsMessage(beforeInferenceRegex).then(() => {
-            sendData("\n");
             recPromise();
+            sendData("\n");
         });
     }, [isValid, executing, nextStep]);
 
@@ -427,9 +456,8 @@ function Execute() {
             </div>
 
             <button
-                className={`bg-rose-200 ${
-                    !isValid ? "opacity-50 cursor-not-allowed" : ""
-                } rounded px-2 py-1`}
+                className={`bg-rose-200 ${!isValid ? "opacity-50 cursor-not-allowed" : ""
+                    } rounded px-2 py-1`}
                 onClick={handleClick}
                 disabled={!isValid}
             >

@@ -2,8 +2,9 @@ import { NodeProps } from "reactflow";
 import InferenceNode from "./InferenceNode";
 import useNodeStore from "./node-store";
 import { useEffect, useState } from "react";
-import { InferenceNodeData, NodeError } from "./InferenceData";
-import { NodeType } from "./node-types";
+import { InferenceNodeData, InferenceNodeType } from "./InferenceData";
+import { NodeError } from "./error";
+import { NodeData, NodeType } from "./NodeData";
 
 const Inference = (p: NodeProps) => {
     const { id, type, selected } = p;
@@ -17,19 +18,19 @@ const Inference = (p: NodeProps) => {
 
     switch (type) {
         case "Coder":
-            nodeType = NodeType.Coder;
+            nodeType = InferenceNodeType.Coder;
             break;
         case "Validator":
-            nodeType = NodeType.Validator;
+            nodeType = InferenceNodeType.Validator;
             break;
         case "Coach":
-            nodeType = NodeType.Coach;
+            nodeType = InferenceNodeType.Coach;
             break;
         case "Capitalizer":
-            nodeType = NodeType.Capitalizer;
+            nodeType = InferenceNodeType.Capitalizer;
             break;
         default:
-            nodeType = NodeType.Coder;
+            nodeType = InferenceNodeType.Coder;
             break;
     }
 
@@ -42,7 +43,8 @@ const Inference = (p: NodeProps) => {
         setBorderCss,
         setLocalSelected
     );
-    addNode(data.id, data);
+    const wrapper = new NodeData(id, NodeType.Inference, data, undefined);
+    addNode(id, wrapper);
 
     
     useEffect(() => {

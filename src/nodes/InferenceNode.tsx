@@ -1,38 +1,30 @@
-import { InferenceProps } from "./Props";
 import NodeCSSClass from "./NodeCSSClass";
 import { Handle, NodeToolbar, Position } from "reactflow";
 import useGlobalStore from "../store";
 import Trash from "../TrashIcon";
-import { NodeError } from "./InferenceData";
+import { InferenceNodeData } from "./InferenceData";
+import { stringifyError } from "./error";
 
-const strigifyError = (error: NodeError) => {
-    switch (error) {
-        case NodeError.None:
-            return "";
-        case NodeError.Cyclic:
-            return "Cyclic";
-        case NodeError.FirstIsNotCoach:
-            return "First is not Coach";
-        case NodeError.LastIsNotCapitalizer:
-            return "Last is not Capitalizer";
-        default:
-            return "";
-    }
-};
 
-const InferenceNode = (p: InferenceProps) => {
+interface InferenceNodeProps {
+    id: string;
+    type: string;
+    selected: boolean;
+    data: InferenceNodeData;
+}
+
+const InferenceNode = (p: InferenceNodeProps) => {
     const { id, type, data } = p;
     const deleteNode = useGlobalStore((state) => state.deleteNode);
 
     const deleteSelf = () => deleteNode(id);
 
-    let error = strigifyError(data.error);
+    let error = stringifyError(data.error);
 
     return (
         <div
-            className={`${NodeCSSClass} w-48 h-48 bg-purple-200 ${
-                data.error ? "border-4 border-red-500" : ""
-            }`}
+            className={`${NodeCSSClass} w-48 h-48 bg-purple-200 ${data.error ? "border-4 border-red-500" : ""
+                }`}
         >
             <NodeToolbar>
                 <Trash onClick={deleteSelf} />

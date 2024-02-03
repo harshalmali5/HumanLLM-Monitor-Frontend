@@ -1,32 +1,19 @@
-import { NodeType } from "./node-types";
+import { NodeError } from "./error";
 
-export enum AfterChoice {
-    ModifyAnswer = 1,
-    CriticAnswer = 2,
-    FindBetterPrompt = 3,
-    EvalAnswer = 4,
-}
+export enum InferenceNodeType {
+    Coder = 1,
+    Capitalizer = 2,
+    Coach = 3,
+    Validator = 4,
+    Critic = 5,
+};
 
-export enum BeforeChoice {
-    ModifyPrompt = 1,
-    AddPrompt = 2,
-    SkipInference = 3,
-    LogComment = 4,
-    UsePremiumLLM = 5,
-}
 
-export enum NodeError {
-    None = 0,
-    FirstIsNotCoach = 1,
-    LastIsNotCapitalizer = 2,
-    NotCoder = 3,
-    Cyclic = 4,
-}
 
 export class InferenceNodeData {
     readonly id: string;
     readonly error: NodeError;
-    readonly type: NodeType;
+    readonly type: InferenceNodeType;
     readonly selected: boolean;
     public setError: (error: NodeError) => void;
     public setBorderCss: (css: string) => void;
@@ -36,7 +23,7 @@ export class InferenceNodeData {
     /// should always be procured from useState
     constructor(
         id: string,
-        type: NodeType,
+        type: InferenceNodeType,
         error: NodeError, 
         selected: boolean,
         setError: (_: NodeError) => void,
