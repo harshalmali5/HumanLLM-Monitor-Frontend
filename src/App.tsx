@@ -219,7 +219,7 @@ function useExecution(
             });
 
             const targetData = nodeData[target.id];
-            targetData?.InferenceData?.setBorderCss("border-4 border-red-500");
+            targetData?.InferenceData?.setBorderCss("border-4 border-teal-500");
 
             if (edgeIx.current === nodes.length) {
                 resolve(false);
