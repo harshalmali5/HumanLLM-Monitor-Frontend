@@ -58,10 +58,10 @@ type ExecAnswer = [string[], boolean];
 const startRegex = /LLM ANSWER/;
 const endRegex = /\*{5}\s\w+/;
 const startRefinedRegex = /REFINED ANSWER/;
-const beforeInferenceRegex = /or hit Enter for inference/;
-const refinedEnd = /Is the task refinement adequate/;
-const criticRegex = /Provide critic\/feedback\/request/;
-const chooseAnAction = /Choose an action or hit Enter/;
+const beforeInferenceRegex = /\(or hit Enter for inference\) :$/;
+const afterInferenceRegex = /Choose an action \(or hit Enter for inference\) :$/;
+const refinedEnd = /Is the task refinement adequate\?$/;
+const criticRegex = /Provide critic\/feedback\/request:$/;
 
 function ExecOutput({ output, edges }: ExecOutputProps) {
     const [processedOutput, setProcessedOutput] = useState<ExecAnswer[]>([]);
@@ -98,9 +98,11 @@ function ExecOutput({ output, edges }: ExecOutputProps) {
                     const answer: string[] = [];
                     let refinedMatch = false;
                     for (let k = j + 1; k < out[i].length; k++) {
+                        const a = [...answer, out[i][k]];
+                        const astr = a.join("");
                         if (
-                            endRegex.test(out[i][k]) ||
-                            (refinedMatch = refinedEnd.test(out[i][k]))
+                            endRegex.test(astr) ||
+                            (refinedMatch = refinedEnd.test(astr))
                         ) {
                             j = k;
                             parsedTill = i;
@@ -226,7 +228,7 @@ function useExecution(
                 return;
             }
 
-            waitWsMessage(chooseAnAction)
+            waitWsMessage(afterInferenceRegex)
                 .then(async () => {
                     switch (target.type) {
                         case "Critic": {
@@ -329,10 +331,6 @@ function Execute() {
         }
     }, []);
 
-    const onMessage = useCallback((e: MessageEvent) => {
-        setOutput((prev) => [...prev, e.data]);
-    }, []);
-
     // used to wait for the websocket to send a message
     const waitWsMessage = useCallback((re: RegExp) => {
         return new Promise<void>((resolve, reject) => {
@@ -341,10 +339,11 @@ function Execute() {
                 return;
             }
             wsRef.current.onmessage = (e) => {
-                onMessage(e);
-                if (re.test(e.data)) {
+                const o = [...output, e.data];
+                if (re.test(o.join(""))) {
                     resolve();
                 }
+                setOutput(o);
             };
         });
     }, []);
