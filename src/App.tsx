@@ -58,8 +58,7 @@ type ExecAnswer = [string[], boolean];
 const startRegex = /LLM ANSWER/;
 const endRegex = /\*{5}\s\w+/;
 const startRefinedRegex = /REFINED ANSWER/;
-const beforeInferenceRegex = /\(or hit Enter for inference\) :$/;
-const afterInferenceRegex = /Choose an action \(or hit Enter for inference\) :$/;
+const beforeInferenceRegex = /Choose an action \(or hit Enter for inference\) :$/;
 const refinedEnd = /Is the task refinement adequate\?$/;
 const criticRegex = /Provide critic\/feedback\/request\: $/;
 
@@ -226,23 +225,14 @@ function useExecution(
                 return;
             }
 
-            waitWsMessage(afterInferenceRegex)
+            waitWsMessage(beforeInferenceRegex)
                 .then(async () => {
                     switch (target.type) {
                         case "Critic": {
-                            sendData("B\n");
+                            sendData("\nB\n");
                             await waitWsMessage(criticRegex);
                             feedbackReceivedRef.current = false;
-                            const interval = setInterval(async () => {
-                                if (feedbackReceivedRef.current) {
-                                    await waitWsMessage(refinedEnd);
-                                    // extra \n to skip before inference
-                                    sendData("y\n");
-                                    clearInterval(interval);
-                                    edgeIx.current++;
-                                    resolve(true);
-                                }
-                            }, 500);
+                            sendData("y\nyes\nyes");
                             break;
                         }
                         case "After": {
