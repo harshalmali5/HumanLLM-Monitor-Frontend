@@ -61,7 +61,7 @@ const startRefinedRegex = /REFINED ANSWER/;
 const beforeInferenceRegex = /\(or hit Enter for inference\) :$/;
 const afterInferenceRegex = /Choose an action \(or hit Enter for inference\) :$/;
 const refinedEnd = /Is the task refinement adequate\?$/;
-const criticRegex = /Provide critic\/feedback\/request:$/;
+const criticRegex = /Provide critic\/feedback\/request\: $/;
 
 function ExecOutput({ output, edges }: ExecOutputProps) {
     const [processedOutput, setProcessedOutput] = useState<ExecAnswer[]>([]);
@@ -157,7 +157,6 @@ function useExecution(
     const nodes = useStore((state) => state.nodes, shallow);
     const nodeData = useNodeStore((state) => state.nodeData, shallow);
     const edgeIx = useRef(0);
-    const [needsFeedback, setNeedsFeedback] = useState(false);
     const feedbackReceivedRef = useRef(false);
 
     const FeedBackInput = () => {
@@ -170,7 +169,6 @@ function useExecution(
         const onSubmit = () => {
             sendData(feedback + "\n");
             setFeedback("");
-            setNeedsFeedback(false);
             feedbackReceivedRef.current = true;
             edgeIx.current++;
         };
@@ -235,12 +233,11 @@ function useExecution(
                             sendData("B\n");
                             await waitWsMessage(criticRegex);
                             feedbackReceivedRef.current = false;
-                            setNeedsFeedback(true);
                             const interval = setInterval(async () => {
                                 if (feedbackReceivedRef.current) {
                                     await waitWsMessage(refinedEnd);
                                     // extra \n to skip before inference
-                                    sendData("yes\ny\n\n");
+                                    sendData("y\n");
                                     clearInterval(interval);
                                     edgeIx.current++;
                                     resolve(true);
@@ -261,7 +258,7 @@ function useExecution(
                             break;
                         }
                         default: {
-                            sendData("\n\n");
+                            sendData("\n");
                             edgeIx.current++;
                             resolve(true);
                         }
@@ -274,7 +271,7 @@ function useExecution(
         return p;
     }, [edges, nodes, nodeData]);
 
-    return { nextStep, needsFeedback, FeedBackInput };
+    return { nextStep, FeedBackInput };
 }
 
 function toposort(edges: Edge[]): Edge[] {
@@ -349,7 +346,7 @@ function Execute() {
     }, []);
 
     const toposortedEdges = toposort(edges);
-    const { nextStep, needsFeedback, FeedBackInput } = useExecution(
+    const { nextStep } = useExecution(
         toposortedEdges,
         sendData,
         waitWsMessage
@@ -449,10 +446,6 @@ function Execute() {
     return (
         <>
             <ExecOutput output={output} edges={toposortedEdges} />
-
-            <div className="flex flex-col space-y-2">
-                {needsFeedback && <FeedBackInput />}
-            </div>
 
             <button
                 className={`bg-rose-200 ${!isValid ? "opacity-50 cursor-not-allowed" : ""
