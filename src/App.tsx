@@ -434,8 +434,8 @@ function Execute() {
             setExecuting(false);
         }
         waitWsMessage(beforeInferenceRegex).then(() => {
-            recPromise();
             sendData("\n");
+            recPromise();
         });
     }, [isValid, executing, nextStep]);
 
