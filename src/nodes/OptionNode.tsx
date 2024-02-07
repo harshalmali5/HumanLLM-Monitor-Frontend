@@ -10,11 +10,7 @@ interface NodeProps {
 const OptionNode = (p: NodeProps) => {
     // has to just choose A-F / J options
     const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const options = ["A", "B", "C", "D", "E", "F", "J"];
-        if (options.includes(e.target.value)) {
-            p.data.setChoice(e.target.value);
-            return;
-        }
+        p.data.setChoice(e.target.value);
     }
 
     return (
@@ -31,7 +27,8 @@ const OptionNode = (p: NodeProps) => {
                 <option>D</option>
                 <option>E</option>
                 <option>F</option>
-                <option>J</option>
+                <option>G</option>
+                <option>P</option>
             </select>
         </div>
     );

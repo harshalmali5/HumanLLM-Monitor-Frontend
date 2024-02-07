@@ -24,7 +24,7 @@ const OptionN = (p: NodeProps) => {
             break;
     }
 
-    const [choice, setChoice] = useState<string>("");
+    const [choice, setChoice] = useState<string>("A");
     const [error, setError] = useState<NodeError>(NodeError.None);
 
     const data = new OptionNodeData(

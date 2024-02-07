@@ -242,7 +242,11 @@ function useExecution(
                             break;
                         }
                         case "Before": {
-                            sendData(targetData?.OptionData?.choice + "\n");
+                            const choice = targetData?.OptionData?.choice;
+                            sendData(choice + "\n");
+                            if (choice && /[A-F]/.test(choice)) {
+                                sendData("Y\n");
+                            }
                             edgeIx.current++;
                             resolve(true);
                             break;
@@ -457,27 +461,39 @@ const initNodes = [
         data: "",
     },
     {
+        id: "BeforeCoder",
+        type: "Before",
+        position: { x: 100, y: 350 },
+        data: "",
+    },
+    {
         id: "2",
         type: "Coder",
-        position: { x: 100, y: 200 },
+        position: { x: 100, y: 600 },
+        data: "",
+    },
+    {
+        id: "AfterCoder",
+        type: "Before",
+        position: { x: 100, y: 850 },
         data: "",
     },
     {
         id: "3",
         type: "Critic",
-        position: { x: 100, y: 300 },
+        position: { x: 100, y: 1100 },
         data: "",
     },
     {
         id: "4",
         type: "Validator",
-        position: { x: 100, y: 400 },
+        position: { x: 100, y: 1350 },
         data: "",
     },
     {
         id: "5",
         type: "Capitalizer",
-        position: { x: 100, y: 500 },
+        position: { x: 100, y: 1600 },
         data: "",
     },
 ];
